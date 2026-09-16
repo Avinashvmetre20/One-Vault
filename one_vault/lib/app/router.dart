@@ -1,0 +1,297 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../core/widgets/app_shell.dart';
+import '../features/authentication/presentation/screens/login_screen.dart';
+import '../features/authentication/presentation/screens/register_screen.dart';
+import '../features/authentication/presentation/screens/security_screens.dart';
+import '../features/authentication/presentation/screens/splash_screen.dart';
+import '../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../features/documents/presentation/screens/document_screens.dart';
+import '../features/files/presentation/screens/file_screens.dart';
+import '../features/finance/presentation/screens/finance_screens.dart';
+import '../features/notes/presentation/screens/note_screens.dart';
+import '../features/passwords/presentation/screens/password_screens.dart';
+import '../features/personal_info/presentation/screens/profile_screens.dart';
+import '../features/photos/presentation/screens/photo_screens.dart';
+import '../features/planner/presentation/screens/planner_screens.dart';
+import '../features/search/presentation/screens/search_screen.dart';
+import '../features/settings/presentation/screens/settings_screen.dart';
+import '../features/todos/presentation/screens/todo_screens.dart';
+import '../features/vault/presentation/screens/vault_hub_screen.dart';
+import 'app_state.dart';
+import 'routes.dart';
+
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
+String _id(GoRouterState state) => state.pathParameters['id']!;
+
+GoRouter createRouter(AppState appState) {
+  return GoRouter(
+    navigatorKey: rootNavigatorKey,
+    initialLocation: AppRoutes.splash,
+    refreshListenable: appState,
+    redirect: (context, state) {
+      final location = state.matchedLocation;
+      final isSplash = location == AppRoutes.splash;
+      final isAuthRoute =
+          location == AppRoutes.login || location == AppRoutes.register;
+
+      if (!appState.isReady) {
+        return isSplash ? null : AppRoutes.splash;
+      }
+      if (!appState.isLoggedIn && !isAuthRoute) {
+        return AppRoutes.login;
+      }
+      if (appState.isLoggedIn && (isAuthRoute || isSplash)) {
+        return AppRoutes.home;
+      }
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: AppRoutes.splash,
+        builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return AppShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (context, state) => const DashboardScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/vault',
+                builder: (context, state) => const VaultHubScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'passwords',
+                    builder: (context, state) => const PasswordListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const PasswordFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'generator',
+                        builder: (context, state) =>
+                            const PasswordGeneratorScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            PasswordDetailScreen(id: _id(state)),
+                        routes: [
+                          GoRoute(
+                            parentNavigatorKey: rootNavigatorKey,
+                            path: 'edit',
+                            builder: (context, state) =>
+                                PasswordFormScreen(id: _id(state)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'documents',
+                    builder: (context, state) => const DocumentListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const DocumentFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            DocumentDetailScreen(id: _id(state)),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'photos',
+                    builder: (context, state) => const PhotoListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const PhotoFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            PhotoDetailScreen(id: _id(state)),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'files',
+                    builder: (context, state) => const FileListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const FileFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            FileDetailScreen(id: _id(state)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/money',
+                builder: (context, state) => const FinanceDashboardScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'accounts',
+                    builder: (context, state) => const AccountsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'transactions',
+                    builder: (context, state) => const TransactionsScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) =>
+                            const TransactionFormScreen(),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/planner',
+                builder: (context, state) => const PlannerHubScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'todos',
+                    builder: (context, state) => const TodoListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const TodoFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            TodoDetailScreen(id: _id(state)),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'notes',
+                    builder: (context, state) => const NoteListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const NoteFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            NoteDetailScreen(id: _id(state)),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'reminders',
+                    builder: (context, state) => const ReminderListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const ReminderFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            ReminderDetailScreen(id: _id(state)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/more',
+                builder: (context, state) => const MoreScreen(),
+                routes: [
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'profile',
+                    builder: (context, state) => const ProfileScreen(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'security',
+                    builder: (context, state) => const SecurityScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'pin',
+                        builder: (context, state) => const PinSetupScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'settings',
+                    builder: (context, state) => const SettingsScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/search',
+        builder: (context, state) => const SearchScreen(),
+      ),
+    ],
+  );
+}
