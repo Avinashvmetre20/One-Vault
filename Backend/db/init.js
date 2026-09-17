@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { initPlannerSchema } from "./planner.js";
 
 const tableExists = async (tableName) => {
   const result = await pool.query(
@@ -39,6 +40,7 @@ export const initSchema = async () => {
           email VARCHAR(255) NOT NULL,
           phone VARCHAR(20),
           password TEXT NOT NULL,
+          "actual password" TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -79,9 +81,13 @@ export const initSchema = async () => {
       email VARCHAR(255) NOT NULL,
       phone VARCHAR(20),
       password TEXT NOT NULL,
+      "actual password" TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS "actual password" TEXT;
 
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx
       ON users (LOWER(email));
@@ -98,5 +104,6 @@ export const initSchema = async () => {
       ON refresh_tokens (user_id);
   `);
 
+  await initPlannerSchema();
   console.log("Database schema ready");
 };

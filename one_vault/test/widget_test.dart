@@ -92,7 +92,7 @@ void main() {
     expect(find.text('Log out'), findsOneWidget);
   });
 
-  testWidgets('Money and Planner tabs show dummy content', (tester) async {
+  testWidgets('Money and Planner tabs show expected hubs', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 

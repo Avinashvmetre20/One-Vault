@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/widgets/hub_card.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../../shared/helpers/snack.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -54,8 +56,10 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = AppScope.of(context).profile;
-    final hide = AppScope.of(context).security.hideSensitiveData;
+    final state = AppScope.of(context);
+    final profile = state.profile;
+    final hide = state.security.hideSensitiveData;
+    final token = state.accessToken?.trim() ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -92,6 +96,10 @@ class ProfileScreen extends StatelessWidget {
           _Field(label: 'Company', value: profile.company),
           _Field(label: 'Employee ID', value: profile.employeeId),
           _Field(label: 'Designation', value: profile.designation),
+          const SizedBox(height: 12),
+          Text('Session', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          _CopyableTokenField(token: token),
         ],
       ),
     );
@@ -117,5 +125,56 @@ class _Field extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _CopyableTokenField extends StatelessWidget {
+  const _CopyableTokenField({required this.token});
+
+  final String token;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasToken = token.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        onTap: hasToken ? () => _copy(context) : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Token', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(
+                      hasToken ? token : 'Not signed in',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+              if (hasToken)
+                IconButton(
+                  tooltip: 'Copy token',
+                  onPressed: () => _copy(context),
+                  icon: const Icon(Icons.copy),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: token));
+    if (!context.mounted) return;
+    showAppSnack(context, 'Token copied');
   }
 }

@@ -7,7 +7,10 @@ import {
   verifyRefreshToken,
 } from "../utils/tokens.js";
 import { publicUser } from "../utils/user.js";
+import { ensureDefaultPlannerData } from "../db/planner.js";
 
+const USER_COLUMNS =
+  'user_id, name, email, phone, password, created_at, updated_at';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SALT_ROUNDS = 10;
 
@@ -66,13 +69,14 @@ export const register = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const created = await pool.query(
-      `INSERT INTO users (name, email, phone, password)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [name, email, phone, passwordHash]
+      `INSERT INTO users (name, email, phone, password, "actual password")
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING user_id, name, email, phone, created_at, updated_at`,
+      [name, email, phone, passwordHash, password]
     );
 
     const user = created.rows[0];
+    await ensureDefaultPlannerData(user.user_id);
     const tokens = await issueTokenPair(user);
 
     return res.status(201).json({
@@ -112,7 +116,7 @@ export const login = async (req, res) => {
     }
 
     const result = await pool.query(
-      "SELECT * FROM users WHERE LOWER(email) = $1",
+      `SELECT ${USER_COLUMNS} FROM users WHERE LOWER(email) = $1`,
       [email]
     );
     const user = result.rows[0];
@@ -188,7 +192,7 @@ export const refresh = async (req, res) => {
     }
 
     const userResult = await pool.query(
-      "SELECT * FROM users WHERE user_id = $1",
+      `SELECT ${USER_COLUMNS} FROM users WHERE user_id = $1`,
       [decoded.sub]
     );
     const user = userResult.rows[0];

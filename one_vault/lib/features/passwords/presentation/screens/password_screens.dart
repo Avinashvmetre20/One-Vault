@@ -9,6 +9,7 @@ import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
+import '../../../../core/widgets/shell_fab.dart';
 import '../../../../app/app_state.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
@@ -49,10 +50,10 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: ShellFab(
         heroTag: 'fab-passwords',
+        tooltip: 'Add password',
         onPressed: () => context.push(AppRoutes.passwordNew),
-        child: const Icon(Icons.add),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),

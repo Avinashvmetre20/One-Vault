@@ -41,10 +41,6 @@ enum AccountType {
 
 enum TransactionType { income, expense, transfer }
 
-enum TodoPriority { high, medium, low }
-
-enum ReminderRecurrence { none, daily, weekly, monthly, yearly }
-
 extension PasswordCategoryLabel on PasswordCategory {
   String get label => switch (this) {
     PasswordCategory.banking => 'Banking',
@@ -89,23 +85,5 @@ extension AccountTypeLabel on AccountType {
     AccountType.debitCard => 'Debit card',
     AccountType.investment => 'Investment',
     AccountType.custom => 'Custom',
-  };
-}
-
-extension TodoPriorityLabel on TodoPriority {
-  String get label => switch (this) {
-    TodoPriority.high => 'High',
-    TodoPriority.medium => 'Medium',
-    TodoPriority.low => 'Low',
-  };
-}
-
-extension ReminderRecurrenceLabel on ReminderRecurrence {
-  String get label => switch (this) {
-    ReminderRecurrence.none => 'One-time',
-    ReminderRecurrence.daily => 'Daily',
-    ReminderRecurrence.weekly => 'Weekly',
-    ReminderRecurrence.monthly => 'Monthly',
-    ReminderRecurrence.yearly => 'Yearly',
   };
 }

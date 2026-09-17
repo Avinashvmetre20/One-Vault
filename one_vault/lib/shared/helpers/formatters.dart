@@ -17,6 +17,10 @@ abstract final class Formatters {
     return DateFormat('dd MMM yyyy, h:mm a').format(date);
   }
 
+  static String time(DateTime date) {
+    return DateFormat('h:mm a').format(date);
+  }
+
   static String weekdayDate(DateTime date) {
     return DateFormat('EEEE, d MMMM yyyy').format(date);
   }

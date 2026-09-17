@@ -7,6 +7,7 @@ import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
+import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
 import '../../../../shared/helpers/snack.dart';
@@ -35,10 +36,10 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Documents')),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: ShellFab(
         heroTag: 'fab-documents',
+        tooltip: 'Add document',
         onPressed: () => context.push(AppRoutes.documentNew),
-        child: const Icon(Icons.add),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),

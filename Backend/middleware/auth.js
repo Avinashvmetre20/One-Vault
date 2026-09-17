@@ -22,9 +22,11 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
-    const result = await pool.query("SELECT * FROM users WHERE user_id = $1", [
-      decoded.sub,
-    ]);
+    const result = await pool.query(
+      `SELECT user_id, name, email, phone, created_at, updated_at
+       FROM users WHERE user_id = $1`,
+      [decoded.sub]
+    );
     const user = result.rows[0];
 
     if (!user) {

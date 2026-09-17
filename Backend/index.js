@@ -4,6 +4,7 @@ import cors from "cors";
 import { pool, connectDB } from "./config/db.js";
 import { initSchema } from "./db/init.js";
 import authRoutes from "./routes/auth.js";
+import plannerRoutes from "./routes/planner.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -29,6 +30,14 @@ app.get("/", (req, res) => {
       logout: "POST /api/auth/logout",
       me: "GET /api/auth/me",
     },
+    planner: {
+      summary: "GET /api/v1/planner/summary",
+      search: "GET /api/v1/planner/search",
+      tasks: "/api/v1/planner/tasks",
+      notes: "/api/v1/planner/notes",
+      reminders: "/api/v1/planner/reminders",
+      calendar: "/api/v1/planner/calendar",
+    },
   });
 });
 
@@ -50,6 +59,7 @@ app.get("/health", async (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/v1/planner", plannerRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

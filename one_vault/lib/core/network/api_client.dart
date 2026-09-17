@@ -11,16 +11,26 @@ class ApiClient {
   final http.Client _client;
   static const _timeout = Duration(seconds: 15);
 
-  Uri _uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
+  Uri _uri(String path, [Map<String, String>? query]) {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    if (query == null || query.isEmpty) return uri;
+    return uri.replace(
+      queryParameters: {
+        ...uri.queryParameters,
+        ...query,
+      },
+    );
+  }
 
   Future<http.Response> get(
     String path, {
     Map<String, String>? headers,
+    Map<String, String>? query,
   }) {
     return _send(
       method: 'GET',
       path: path,
-      request: () => _client.get(_uri(path), headers: headers),
+      request: () => _client.get(_uri(path, query), headers: headers),
     );
   }
 
@@ -33,6 +43,30 @@ class ApiClient {
       method: 'POST',
       path: path,
       request: () => _client.post(_uri(path), headers: headers, body: body),
+    );
+  }
+
+  Future<http.Response> patch(
+    String path, {
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    return _send(
+      method: 'PATCH',
+      path: path,
+      request: () => _client.patch(_uri(path), headers: headers, body: body),
+    );
+  }
+
+  Future<http.Response> delete(
+    String path, {
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    return _send(
+      method: 'DELETE',
+      path: path,
+      request: () => _client.delete(_uri(path), headers: headers, body: body),
     );
   }
 

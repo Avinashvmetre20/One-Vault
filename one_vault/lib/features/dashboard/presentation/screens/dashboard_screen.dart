@@ -82,7 +82,7 @@ class DashboardScreen extends StatelessWidget {
                     child: SectionTitle(
                       title: "Today's tasks",
                       action: TextButton(
-                        onPressed: () => context.go(AppRoutes.todos),
+                        onPressed: () => context.go(AppRoutes.tasks),
                         child: const Text('See all'),
                       ),
                     ),
@@ -90,7 +90,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: padding),
-                  sliver: SliverToBoxAdapter(child: _TodayTasks(state: state)),
+                  sliver: const SliverToBoxAdapter(child: _TodayTasks()),
                 ),
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(padding, 28, padding, 12),
@@ -100,7 +100,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: padding),
-                  sliver: SliverToBoxAdapter(child: _UpcomingItems(state: state)),
+                  sliver: const SliverToBoxAdapter(child: _UpcomingItems()),
                 ),
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(padding, 28, padding, 12),
@@ -110,7 +110,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(padding, 0, padding, 30),
-                  sliver: SliverToBoxAdapter(child: _RecentItems(state: state)),
+                  sliver: const SliverToBoxAdapter(child: _RecentItems()),
                 ),
               ],
             );
@@ -391,56 +391,27 @@ class _ResponsiveActionGrid extends StatelessWidget {
 }
 
 class _TodayTasks extends StatelessWidget {
-  const _TodayTasks({required this.state});
-
-  final AppState state;
+  const _TodayTasks();
 
   @override
   Widget build(BuildContext context) {
-    final tasks = state.todaysTasks;
-    if (tasks.isEmpty) {
-      return const AppCard(
-        child: Text('No tasks due today.'),
-      );
-    }
-    return Column(
-      children: [
-        for (var i = 0; i < tasks.length; i++) ...[
-          ListTileCard(
-            icon: Icons.check_circle_outline,
-            title: tasks[i].title,
-            subtitle: '${tasks[i].priority.label} · ${tasks[i].category}',
-            onTap: () => context.push(AppRoutes.todoDetail(tasks[i].id)),
-          ),
-          if (i != tasks.length - 1) const SizedBox(height: 12),
-        ],
-      ],
+    return const AppCard(
+      child: Text('Open Planner to see tasks due today.'),
     );
   }
 }
 
 class _UpcomingItems extends StatelessWidget {
-  const _UpcomingItems({required this.state});
-
-  final AppState state;
+  const _UpcomingItems();
 
   @override
   Widget build(BuildContext context) {
-    final reminders = [...state.reminders]
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    final state = AppScope.of(context);
     final expiries = state.documents.where((item) => item.expiryDate != null).toList()
       ..sort((a, b) => a.expiryDate!.compareTo(b.expiryDate!));
 
     return Column(
       children: [
-        if (reminders.isNotEmpty)
-          ListTileCard(
-            icon: Icons.notifications_outlined,
-            title: reminders.first.title,
-            subtitle: Formatters.date(reminders.first.dateTime),
-            onTap: () => context.go(AppRoutes.reminders),
-          ),
-        const SizedBox(height: 12),
         ListTileCard(
           icon: Icons.credit_card,
           title: 'Credit card due',
@@ -462,15 +433,13 @@ class _UpcomingItems extends StatelessWidget {
 }
 
 class _RecentItems extends StatelessWidget {
-  const _RecentItems({required this.state});
-
-  final AppState state;
+  const _RecentItems();
 
   @override
   Widget build(BuildContext context) {
+    final state = AppScope.of(context);
     final recentTxn = state.transactions.first;
     final recentDoc = state.documents.first;
-    final recentNote = state.notes.first;
 
     return Column(
       children: [
@@ -487,13 +456,6 @@ class _RecentItems extends StatelessWidget {
           title: recentDoc.name,
           subtitle: recentDoc.category.label,
           onTap: () => context.push(AppRoutes.documentDetail(recentDoc.id)),
-        ),
-        const SizedBox(height: 12),
-        ListTileCard(
-          icon: Icons.sticky_note_2_outlined,
-          title: recentNote.title,
-          subtitle: recentNote.content,
-          onTap: () => context.push(AppRoutes.noteDetail(recentNote.id)),
         ),
       ],
     );

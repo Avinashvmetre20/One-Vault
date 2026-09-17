@@ -30,17 +30,30 @@ abstract final class AppRoutes {
   static const transactionNew = '/money/transactions/new';
 
   static const planner = '/planner';
-  static const todos = '/planner/todos';
-  static const todoNew = '/planner/todos/new';
-  static String todoDetail(String id) => '/planner/todos/$id';
+  static const tasks = '/planner/tasks';
+  static const taskNew = '/planner/tasks/new';
+  static String taskDetail(int id) => '/planner/tasks/$id';
+  static String taskEdit(int id) => '/planner/tasks/$id/edit';
 
   static const notes = '/planner/notes';
   static const noteNew = '/planner/notes/new';
-  static String noteDetail(String id) => '/planner/notes/$id';
+  static String noteDetail(int id) => '/planner/notes/$id';
+  static String noteEdit(int id) => '/planner/notes/$id/edit';
 
   static const reminders = '/planner/reminders';
   static const reminderNew = '/planner/reminders/new';
-  static String reminderDetail(String id) => '/planner/reminders/$id';
+  static String reminderDetail(int id) => '/planner/reminders/$id';
+  static String reminderEdit(int id) => '/planner/reminders/$id/edit';
+  static String reminderRinging(int id) => '/planner/reminders/ringing/$id';
+
+  static const alarms = '/planner/alarms';
+  static const alarmNew = '/planner/alarms/new';
+  static String alarmDetail(int id) => '/planner/alarms/$id';
+  static String alarmEdit(int id) => '/planner/alarms/$id/edit';
+
+  static const calendar = '/planner/calendar';
+  static const calendarNew = '/planner/calendar/new';
+  static String calendarEdit(int id) => '/planner/calendar/$id';
 
   static const more = '/more';
   static const profile = '/more/profile';

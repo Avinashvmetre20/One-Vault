@@ -6,6 +6,7 @@ import '../../../../app/routes.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
+import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../../../shared/models/models.dart';
@@ -20,10 +21,10 @@ class PhotoListScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Photos')),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: ShellFab(
         heroTag: 'fab-photos',
+        tooltip: 'Add photo',
         onPressed: () => context.push(AppRoutes.photoNew),
-        child: const Icon(Icons.add),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),

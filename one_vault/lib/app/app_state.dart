@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../features/authentication/data/auth_models.dart';
 import '../features/authentication/data/auth_service.dart';
 import '../features/authentication/data/auth_storage.dart';
+import '../features/planner/data/planner_service.dart';
 import '../shared/enums/enums.dart';
 import '../shared/models/models.dart';
 
@@ -65,9 +66,18 @@ class AppState extends ChangeNotifier {
   final List<FileItem> files = [];
   final List<AccountItem> accounts = [];
   final List<TransactionItem> transactions = [];
-  final List<TodoItem> todos = [];
-  final List<NoteItem> notes = [];
-  final List<ReminderItem> reminders = [];
+
+  late final PlannerService planner = PlannerService(
+    token: () => accessToken,
+    onChanged: notifyPlannerChanged,
+  );
+
+  final ValueNotifier<int> plannerTick = ValueNotifier<int>(0);
+  final ValueNotifier<int> shellTabIndex = ValueNotifier<int>(0);
+
+  void notifyPlannerChanged() {
+    plannerTick.value++;
+  }
 
   String nextId(String prefix) => '$prefix-${_nextId++}';
 
@@ -84,21 +94,9 @@ class AppState extends ChangeNotifier {
 
   double get monthlySavings => monthlyIncome - monthlyExpense;
 
-  List<TodoItem> get todaysTasks {
-    final now = DateTime.now();
-    return todos.where((item) {
-      if (item.completed || item.dueDate == null) return false;
-      return _sameDay(item.dueDate!, now);
-    }).toList();
-  }
-
   bool _isThisMonth(DateTime date) {
     final now = DateTime.now();
     return date.year == now.year && date.month == now.month;
-  }
-
-  bool _sameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   AccountItem? accountById(String id) {
@@ -188,6 +186,7 @@ class AppState extends ChangeNotifier {
     accessToken = null;
     refreshToken = null;
     sessionUser = null;
+    shellTabIndex.value = 0;
     await _authStorage.clear();
     if (notify) notifyListeners();
   }
@@ -264,43 +263,6 @@ class AppState extends ChangeNotifier {
 
   void addTransaction(TransactionItem item) {
     transactions.insert(0, item);
-    notifyListeners();
-  }
-
-  void addTodo(TodoItem item) {
-    todos.insert(0, item);
-    notifyListeners();
-  }
-
-  void toggleTodo(String id) {
-    final index = todos.indexWhere((item) => item.id == id);
-    if (index == -1) return;
-    todos[index] = todos[index].copyWith(completed: !todos[index].completed);
-    notifyListeners();
-  }
-
-  void addNote(NoteItem item) {
-    notes.insert(0, item);
-    notifyListeners();
-  }
-
-  void addReminder(ReminderItem item) {
-    reminders.insert(0, item);
-    notifyListeners();
-  }
-
-  void toggleReminder(String id) {
-    final index = reminders.indexWhere((item) => item.id == id);
-    if (index == -1) return;
-    final current = reminders[index];
-    reminders[index] = ReminderItem(
-      id: current.id,
-      title: current.title,
-      dateTime: current.dateTime,
-      recurrence: current.recurrence,
-      linkedTo: current.linkedTo,
-      completed: !current.completed,
-    );
     notifyListeners();
   }
 
@@ -644,92 +606,6 @@ class AppState extends ChangeNotifier {
         type: TransactionType.expense,
         paymentMethod: 'Auto-debit',
         merchant: 'HDFC Bank',
-      ),
-    ]);
-
-    final today = DateTime.now();
-    todos.addAll([
-      TodoItem(
-        id: 'todo-1',
-        title: 'Pay electricity bill',
-        description: 'MSEDCL bill due today',
-        priority: TodoPriority.high,
-        category: 'Bills',
-        dueDate: DateTime(today.year, today.month, today.day, 18),
-      ),
-      TodoItem(
-        id: 'todo-2',
-        title: 'Submit timesheet',
-        description: 'Weekly hours for payroll',
-        priority: TodoPriority.medium,
-        category: 'Work',
-        dueDate: DateTime(today.year, today.month, today.day, 17),
-      ),
-      TodoItem(
-        id: 'todo-3',
-        title: 'Renew car insurance',
-        description: 'Policy ends 12 December',
-        priority: TodoPriority.high,
-        category: 'Vehicle',
-        dueDate: DateTime(2026, 12, 1),
-      ),
-      TodoItem(
-        id: 'todo-4',
-        title: 'Call mom',
-        description: 'Sunday catch-up',
-        priority: TodoPriority.low,
-        category: 'Personal',
-        dueDate: DateTime(today.year, today.month, today.day + 1),
-      ),
-    ]);
-
-    notes.addAll([
-      NoteItem(
-        id: 'note-1',
-        title: 'HDFC locker',
-        content: 'Locker number 214. Visit branch before 4 PM on weekdays.',
-        tags: const ['hdfc', 'bank'],
-        updatedAt: DateTime(2026, 9, 14),
-        isPinned: true,
-      ),
-      NoteItem(
-        id: 'note-2',
-        title: 'Gift ideas',
-        content: 'Wireless earbuds, notebook set, dinner reservation.',
-        tags: const ['personal'],
-        updatedAt: DateTime(2026, 9, 10),
-      ),
-      NoteItem(
-        id: 'note-3',
-        title: 'Sprint notes',
-        content: 'Ship vault list screens, then wire Express APIs.',
-        tags: const ['work'],
-        updatedAt: DateTime(2026, 9, 16),
-        isFavorite: true,
-      ),
-    ]);
-
-    reminders.addAll([
-      ReminderItem(
-        id: 'rem-1',
-        title: 'Car insurance expiry',
-        dateTime: DateTime(2026, 12, 12, 9),
-        recurrence: ReminderRecurrence.none,
-        linkedTo: 'Car Insurance.pdf',
-      ),
-      ReminderItem(
-        id: 'rem-2',
-        title: 'Credit card due',
-        dateTime: DateTime(2026, 9, 22, 10),
-        recurrence: ReminderRecurrence.monthly,
-        linkedTo: 'HDFC Credit Card',
-      ),
-      ReminderItem(
-        id: 'rem-3',
-        title: 'SIP instalment',
-        dateTime: DateTime(2026, 9, 20, 8),
-        recurrence: ReminderRecurrence.monthly,
-        linkedTo: 'Investments',
       ),
     ]);
   }

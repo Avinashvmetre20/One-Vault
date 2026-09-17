@@ -1,188 +1,196 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/widgets/empty_state.dart';
-import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/hub_card.dart';
-import '../../../../core/widgets/list_tile_card.dart';
-import '../../../../shared/enums/enums.dart';
-import '../../../../shared/helpers/formatters.dart';
-import '../../../../shared/helpers/snack.dart';
-import '../../../../shared/models/models.dart';
+import '../../data/planner_models.dart';
+import '../../data/planner_service.dart';
+import '../../data/reminder_notifications.dart';
 
-class PlannerHubScreen extends StatelessWidget {
-  const PlannerHubScreen({super.key});
+mixin PlannerTickReload<T extends StatefulWidget> on State<T> {
+  ValueNotifier<int>? _plannerTick;
 
-  @override
-  Widget build(BuildContext context) {
-    final state = AppScope.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Planner')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          HubCard(
-            icon: Icons.check_circle_outline,
-            title: 'Tasks',
-            subtitle: '${state.todos.where((item) => !item.completed).length} open',
-            onTap: () => context.push(AppRoutes.todos),
-          ),
-          HubCard(
-            icon: Icons.sticky_note_2_outlined,
-            title: 'Notes',
-            subtitle: '${state.notes.length} notes',
-            onTap: () => context.push(AppRoutes.notes),
-          ),
-          HubCard(
-            icon: Icons.notifications_outlined,
-            title: 'Reminders',
-            subtitle: '${state.reminders.where((item) => !item.completed).length} upcoming',
-            onTap: () => context.push(AppRoutes.reminders),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ReminderListScreen extends StatelessWidget {
-  const ReminderListScreen({super.key});
+  @protected
+  Future<void> reloadPlannerData();
 
   @override
-  Widget build(BuildContext context) {
-    final state = AppScope.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reminders')),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'fab-reminders',
-        onPressed: () => context.push(AppRoutes.reminderNew),
-        child: const Icon(Icons.add),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
-        children: [
-          if (state.reminders.isEmpty)
-            const EmptyState(
-              icon: Icons.notifications_outlined,
-              title: 'No reminders',
-              subtitle: 'Create a reminder for bills, expiry, or tasks.',
-            )
-          else
-            ...state.reminders.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: ListTileCard(
-                  icon: item.completed
-                      ? Icons.notifications_off_outlined
-                      : Icons.notifications_outlined,
-                  title: item.title,
-                  subtitle:
-                      '${Formatters.dateTime(item.dateTime)} · ${item.recurrence.label}',
-                  trailing: IconButton(
-                    onPressed: () => state.toggleReminder(item.id),
-                    icon: Icon(item.completed ? Icons.undo : Icons.done),
-                  ),
-                  onTap: () => context.push(AppRoutes.reminderDetail(item.id)),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class ReminderDetailScreen extends StatelessWidget {
-  const ReminderDetailScreen({super.key, required this.id});
-
-  final String id;
-
-  @override
-  Widget build(BuildContext context) {
-    final item = AppScope.of(context).reminders.where((entry) => entry.id == id).firstOrNull;
-    if (item == null) {
-      return const Scaffold(
-        body: EmptyState(
-          icon: Icons.notifications_outlined,
-          title: 'Not found',
-          subtitle: 'This reminder is gone.',
-        ),
-      );
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tick = AppScope.of(context).plannerTick;
+    if (!identical(_plannerTick, tick)) {
+      _plannerTick?.removeListener(_handlePlannerTick);
+      _plannerTick = tick;
+      _plannerTick!.addListener(_handlePlannerTick);
     }
-
-    return Scaffold(
-      appBar: AppBar(title: Text(item.title)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          Text(Formatters.dateTime(item.dateTime)),
-          const SizedBox(height: 8),
-          Text('Repeat: ${item.recurrence.label}'),
-          const SizedBox(height: 8),
-          Text('Linked to: ${item.linkedTo ?? 'None'}'),
-          const SizedBox(height: 8),
-          Text(item.completed ? 'Completed' : 'Scheduled'),
-        ],
-      ),
-    );
   }
-}
 
-class ReminderFormScreen extends StatefulWidget {
-  const ReminderFormScreen({super.key});
-
-  @override
-  State<ReminderFormScreen> createState() => _ReminderFormScreenState();
-}
-
-class _ReminderFormScreenState extends State<ReminderFormScreen> {
-  final _title = TextEditingController();
-  ReminderRecurrence _recurrence = ReminderRecurrence.none;
+  void _handlePlannerTick() {
+    if (mounted) reloadPlannerData();
+  }
 
   @override
   void dispose() {
-    _title.dispose();
+    _plannerTick?.removeListener(_handlePlannerTick);
     super.dispose();
+  }
+}
+
+class PlannerHubScreen extends StatefulWidget {
+  const PlannerHubScreen({super.key});
+
+  @override
+  State<PlannerHubScreen> createState() => _PlannerHubScreenState();
+}
+
+class _PlannerHubScreenState extends State<PlannerHubScreen>
+    with PlannerTickReload {
+  PlannerSummary _summary = const PlannerSummary();
+  bool _loading = false;
+  bool _opened = false;
+  bool _didRestoreAlarms = false;
+  ValueNotifier<int>? _shellIndex;
+
+  PlannerService get _api => AppScope.of(context).planner;
+
+  static const _plannerTab = 3;
+
+  @override
+  Future<void> reloadPlannerData() {
+    if (!_opened) return Future.value();
+    return _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final index = AppScope.of(context).shellTabIndex;
+    if (!identical(_shellIndex, index)) {
+      _shellIndex?.removeListener(_onShellTab);
+      _shellIndex = index;
+      _shellIndex!.addListener(_onShellTab);
+    }
+    _onShellTab();
+  }
+
+  void _onShellTab() {
+    if (!mounted) return;
+    if (_shellIndex?.value != _plannerTab) return;
+    if (_opened) return;
+    _opened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final summary = await _api.summary();
+      if (!_didRestoreAlarms) {
+        _didRestoreAlarms = true;
+        unawaited(ReminderNotifications.instance.restorePending());
+      }
+      if (!mounted) return;
+      setState(() {
+        _summary = summary;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _shellIndex?.removeListener(_onShellTab);
+    super.dispose();
+  }
+
+  Future<void> _open(String route) async {
+    await context.push(route);
+    if (mounted) _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FormPage(
-      title: 'Add reminder',
-      onSubmit: () {
-        if (_title.text.trim().isEmpty) {
-          showAppSnack(context, 'Title is required');
-          return;
-        }
-        final state = AppScope.of(context);
-        state.addReminder(
-          ReminderItem(
-            id: state.nextId('rem'),
-            title: _title.text.trim(),
-            dateTime: DateTime.now().add(const Duration(days: 1)),
-            recurrence: _recurrence,
-          ),
-        );
-        showAppSnack(context, 'Reminder added');
-        context.pop();
-      },
-      children: [
-        TextField(
-          controller: _title,
-          decoration: const InputDecoration(labelText: 'Title'),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Planner')),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          children: [
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+            if (_summary.tasksToday > 0 ||
+                _summary.remindersToday > 0 ||
+                _summary.alarmsToday > 0 ||
+                _summary.eventsToday > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  'Today · ${_summary.tasksToday} tasks · ${_summary.alarmsToday} alarms · ${_summary.remindersToday} reminders · ${_summary.eventsToday} events',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
+            HubCard(
+              icon: Icons.check_circle_outline,
+              title: 'Tasks',
+              subtitle: '${_summary.tasksOpen} open',
+              onTap: () => _open(AppRoutes.tasks),
+            ),
+            HubCard(
+              icon: Icons.sticky_note_2_outlined,
+              title: 'Notes',
+              subtitle: '${_summary.notesTotal} notes',
+              onTap: () => _open(AppRoutes.notes),
+            ),
+            HubCard(
+              icon: Icons.alarm,
+              title: 'Alarms',
+              subtitle: '${_summary.alarmsUpcoming} set',
+              onTap: () => _open(AppRoutes.alarms),
+            ),
+            HubCard(
+              icon: Icons.notifications_outlined,
+              title: 'Reminders',
+              subtitle: '${_summary.remindersUpcoming} upcoming',
+              onTap: () => _open(AppRoutes.reminders),
+            ),
+            HubCard(
+              icon: Icons.calendar_month_outlined,
+              title: 'Calendar',
+              subtitle: 'Agenda and schedule',
+              onTap: () => _open(AppRoutes.calendar),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<ReminderRecurrence>(
-          initialValue: _recurrence,
-          decoration: const InputDecoration(labelText: 'Repeat'),
-          items: ReminderRecurrence.values
-              .map((item) => DropdownMenuItem(value: item, child: Text(item.label)))
-              .toList(),
-          onChanged: (value) => setState(() => _recurrence = value ?? _recurrence),
-        ),
-      ],
+      ),
+    );
+  }
+}
+
+class PlannerErrorState extends StatelessWidget {
+  const PlannerErrorState({super.key, required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return EmptyState(
+      icon: Icons.wifi_off_rounded,
+      title: 'Could not load',
+      subtitle: message,
+      action: FilledButton(onPressed: onRetry, child: const Text('Try again')),
     );
   }
 }

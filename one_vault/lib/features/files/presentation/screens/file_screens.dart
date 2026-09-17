@@ -6,6 +6,7 @@ import '../../../../app/routes.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
+import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../../../shared/models/models.dart';
@@ -18,10 +19,10 @@ class FileListScreen extends StatelessWidget {
     final files = AppScope.of(context).files;
     return Scaffold(
       appBar: AppBar(title: const Text('Files')),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: ShellFab(
         heroTag: 'fab-files',
+        tooltip: 'Add file',
         onPressed: () => context.push(AppRoutes.fileNew),
-        child: const Icon(Icons.add),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),

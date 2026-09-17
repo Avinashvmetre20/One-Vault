@@ -10,14 +10,18 @@ import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/documents/presentation/screens/document_screens.dart';
 import '../features/files/presentation/screens/file_screens.dart';
 import '../features/finance/presentation/screens/finance_screens.dart';
-import '../features/notes/presentation/screens/note_screens.dart';
+import '../features/planner/presentation/screens/alarm_screens.dart';
+import '../features/planner/presentation/screens/calendar_screens.dart';
+import '../features/planner/presentation/screens/note_screens.dart';
+import '../features/planner/presentation/screens/planner_screens.dart';
+import '../features/planner/presentation/screens/alarm_ringing_screen.dart';
+import '../features/planner/presentation/screens/reminder_screens.dart';
+import '../features/planner/presentation/screens/task_screens.dart';
 import '../features/passwords/presentation/screens/password_screens.dart';
 import '../features/personal_info/presentation/screens/profile_screens.dart';
 import '../features/photos/presentation/screens/photo_screens.dart';
-import '../features/planner/presentation/screens/planner_screens.dart';
 import '../features/search/presentation/screens/search_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
-import '../features/todos/presentation/screens/todo_screens.dart';
 import '../features/vault/presentation/screens/vault_hub_screen.dart';
 import 'app_state.dart';
 import 'routes.dart';
@@ -25,6 +29,8 @@ import 'routes.dart';
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 String _id(GoRouterState state) => state.pathParameters['id']!;
+
+int _intId(GoRouterState state) => int.parse(state.pathParameters['id']!);
 
 GoRouter createRouter(AppState appState) {
   return GoRouter(
@@ -199,19 +205,27 @@ GoRouter createRouter(AppState appState) {
                 builder: (context, state) => const PlannerHubScreen(),
                 routes: [
                   GoRoute(
-                    path: 'todos',
-                    builder: (context, state) => const TodoListScreen(),
+                    path: 'tasks',
+                    builder: (context, state) => const TaskListScreen(),
                     routes: [
                       GoRoute(
                         parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
-                        builder: (context, state) => const TodoFormScreen(),
+                        builder: (context, state) => const TaskFormScreen(),
                       ),
                       GoRoute(
                         parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
-                            TodoDetailScreen(id: _id(state)),
+                            TaskDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            parentNavigatorKey: rootNavigatorKey,
+                            path: 'edit',
+                            builder: (context, state) =>
+                                TaskFormScreen(id: _intId(state)),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -228,7 +242,40 @@ GoRouter createRouter(AppState appState) {
                         parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
-                            NoteDetailScreen(id: _id(state)),
+                            NoteDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            parentNavigatorKey: rootNavigatorKey,
+                            path: 'edit',
+                            builder: (context, state) =>
+                                NoteFormScreen(id: _intId(state)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'alarms',
+                    builder: (context, state) => const AlarmListScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) => const AlarmFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            ReminderDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            parentNavigatorKey: rootNavigatorKey,
+                            path: 'edit',
+                            builder: (context, state) =>
+                                AlarmFormScreen(id: _intId(state)),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -243,9 +290,41 @@ GoRouter createRouter(AppState appState) {
                       ),
                       GoRoute(
                         parentNavigatorKey: rootNavigatorKey,
+                        path: 'ringing/:id',
+                        builder: (context, state) =>
+                            AlarmRingingScreen(id: _intId(state)),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
-                            ReminderDetailScreen(id: _id(state)),
+                            ReminderDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            parentNavigatorKey: rootNavigatorKey,
+                            path: 'edit',
+                            builder: (context, state) =>
+                                ReminderFormScreen(id: _intId(state)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'calendar',
+                    builder: (context, state) => const PlannerCalendarScreen(),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'new',
+                        builder: (context, state) =>
+                            const CalendarEventFormScreen(),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: ':id',
+                        builder: (context, state) =>
+                            CalendarEventFormScreen(id: _intId(state)),
                       ),
                     ],
                   ),

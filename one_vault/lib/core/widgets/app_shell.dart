@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/app_scope.dart';
 import 'floating_tab_bar.dart';
 
 class AppShell extends StatelessWidget {
@@ -8,7 +9,7 @@ class AppShell extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  static const _barClearance = 90.0;
+  static const barClearance = 90.0;
 
   static const _tabs = [
     FloatingTabItem(
@@ -41,13 +42,21 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final shellIndex = AppScope.of(context).shellTabIndex;
+    if (shellIndex.value != navigationShell.currentIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (shellIndex.value != navigationShell.currentIndex) {
+          shellIndex.value = navigationShell.currentIndex;
+        }
+      });
+    }
 
     return Scaffold(
       extendBody: true,
       body: MediaQuery(
         data: media.copyWith(
           padding: media.padding.copyWith(
-            bottom: media.padding.bottom + _barClearance,
+            bottom: media.padding.bottom + barClearance,
           ),
         ),
         child: navigationShell,
@@ -59,6 +68,7 @@ class AppShell extends StatelessWidget {
           currentIndex: navigationShell.currentIndex,
           items: _tabs,
           onTap: (index) {
+            shellIndex.value = index;
             navigationShell.goBranch(
               index,
               initialLocation: index == navigationShell.currentIndex,

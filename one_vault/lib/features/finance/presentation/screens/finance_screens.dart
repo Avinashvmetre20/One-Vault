@@ -8,6 +8,7 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/section_title.dart';
+import '../../../../core/widgets/shell_fab.dart';
 import '../../../../app/app_state.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
@@ -172,10 +173,10 @@ class TransactionsScreen extends StatelessWidget {
     final state = AppScope.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Transactions')),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: ShellFab(
         heroTag: 'fab-transactions',
+        tooltip: 'Add transaction',
         onPressed: () => context.push(AppRoutes.transactionNew),
-        child: const Icon(Icons.add),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),

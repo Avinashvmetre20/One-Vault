@@ -8,6 +8,7 @@ import '../../../../core/widgets/search_field.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
 import '../../../../shared/models/models.dart';
+import '../../../planner/data/planner_models.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -18,6 +19,22 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
+  List<PlannerSearchHit> _plannerHits = [];
+
+  Future<void> _searchPlanner(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _plannerHits = []);
+      return;
+    }
+    try {
+      final hits = await AppScope.of(context).planner.search(query);
+      if (!mounted) return;
+      setState(() => _plannerHits = hits);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _plannerHits = []);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,15 +52,6 @@ class _SearchScreenState extends State<SearchScreen> {
     final documentHits = q.isEmpty
         ? <DocumentItem>[]
         : state.documents.where((item) => item.name.toLowerCase().contains(q)).toList();
-    final noteHits = q.isEmpty
-        ? <NoteItem>[]
-        : state.notes
-              .where(
-                (item) =>
-                    item.title.toLowerCase().contains(q) ||
-                    item.content.toLowerCase().contains(q),
-              )
-              .toList();
     final txnHits = q.isEmpty
         ? <TransactionItem>[]
         : state.transactions
@@ -61,20 +69,51 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           AppSearchField(
             hintText: 'Try HDFC, Amazon, insurance...',
-            onChanged: (value) => setState(() => _query = value),
+            onChanged: (value) {
+              setState(() => _query = value);
+              _searchPlanner(value);
+            },
           ),
           const SizedBox(height: 20),
           if (q.isEmpty)
             Text(
-              'Type to look through dummy passwords, documents, notes, and transactions.',
+              'Type to look through passwords, documents, tasks, notes, reminders, and transactions.',
               style: TextStyle(color: Colors.grey.shade600),
             )
           else if (passwordHits.isEmpty &&
               documentHits.isEmpty &&
-              noteHits.isEmpty &&
-              txnHits.isEmpty)
+              txnHits.isEmpty &&
+              _plannerHits.isEmpty)
             Text('No matches for "$q".', style: TextStyle(color: Colors.grey.shade600))
           else ...[
+            for (final item in _plannerHits) ...[
+              ListTileCard(
+                icon: switch (item.type) {
+                  'note' => Icons.sticky_note_2_outlined,
+                  'reminder' => Icons.notifications_outlined,
+                  'alarm' => Icons.alarm,
+                  'event' => Icons.event_outlined,
+                  _ => Icons.check_circle_outline,
+                },
+                title: item.title,
+                subtitle: item.type[0].toUpperCase() + item.type.substring(1),
+                onTap: () {
+                  switch (item.type) {
+                    case 'note':
+                      context.push(AppRoutes.noteDetail(item.id));
+                    case 'reminder':
+                      context.push(AppRoutes.reminderDetail(item.id));
+                    case 'alarm':
+                      context.push(AppRoutes.alarmDetail(item.id));
+                    case 'event':
+                      context.push(AppRoutes.calendarEdit(item.id));
+                    default:
+                      context.push(AppRoutes.taskDetail(item.id));
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
             for (final item in passwordHits) ...[
               ListTileCard(
                 icon: Icons.lock_outline,
@@ -90,15 +129,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 title: item.name,
                 subtitle: 'Document · ${item.category.label}',
                 onTap: () => context.push(AppRoutes.documentDetail(item.id)),
-              ),
-              const SizedBox(height: 12),
-            ],
-            for (final item in noteHits) ...[
-              ListTileCard(
-                icon: Icons.sticky_note_2_outlined,
-                title: item.title,
-                subtitle: 'Note',
-                onTap: () => context.push(AppRoutes.noteDetail(item.id)),
               ),
               const SizedBox(height: 12),
             ],
