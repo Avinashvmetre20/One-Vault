@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
+import 'app_icon_badge.dart';
 
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -24,15 +25,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.iconWash,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(icon, size: 36, color: AppColors.primary),
-            ),
+            AppIconBadge(icon: icon, size: 72, iconSize: 36),
             const SizedBox(height: 18),
             Text(
               title,
@@ -45,7 +38,7 @@ class EmptyState extends StatelessWidget {
               subtitle,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
+                color: AppColors.muted(context),
                 height: 1.4,
               ),
             ),

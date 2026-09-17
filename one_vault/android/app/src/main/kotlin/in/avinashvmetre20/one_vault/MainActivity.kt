@@ -1,14 +1,16 @@
-package com.example.one_vault
+package `in`.avinashvmetre20.one_vault
 
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import com.example.one_vault.autofill.AutofillChannels
+import `in`.avinashvmetre20.one_vault.autofill.AutofillChannels
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
+    private var secureRequested = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -24,6 +26,20 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    override fun onPause() {
+        if (secureRequested) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // FLAG_SECURE while typing leaves a white gap above the keyboard.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        applyRecentsSecure()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
@@ -31,20 +47,19 @@ class MainActivity : FlutterFragmentActivity() {
             "onevault/screen_security"
         ).setMethodCallHandler { call, result ->
             if (call.method == "setSecure") {
-                val secure = call.arguments as? Boolean ?: false
-                if (secure) {
-                    window.setFlags(
-                        WindowManager.LayoutParams.FLAG_SECURE,
-                        WindowManager.LayoutParams.FLAG_SECURE
-                    )
-                } else {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                }
+                secureRequested = call.arguments as? Boolean ?: false
+                applyRecentsSecure()
                 result.success(null)
             } else {
                 result.notImplemented()
             }
         }
         AutofillChannels.register(this, flutterEngine)
+    }
+
+    private fun applyRecentsSecure() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!secureRequested)
+        }
     }
 }

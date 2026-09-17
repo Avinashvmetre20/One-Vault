@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/widgets/app_shell.dart';
 import '../features/authentication/presentation/screens/login_screen.dart';
+import '../features/authentication/presentation/screens/mpin_screens.dart';
 import '../features/authentication/presentation/screens/register_screen.dart';
 import '../features/authentication/presentation/screens/security_screens.dart';
 import '../features/authentication/presentation/screens/splash_screen.dart';
@@ -42,6 +43,9 @@ GoRouter createRouter(AppState appState) {
       final isSplash = location == AppRoutes.splash;
       final isAuthRoute =
           location == AppRoutes.login || location == AppRoutes.register;
+      final isMpinSetup = location == AppRoutes.mpinSetup;
+      final isMpinUnlock = location == AppRoutes.mpinUnlock;
+      final isMpinRoute = isMpinSetup || isMpinUnlock;
 
       if (!appState.isReady) {
         return isSplash ? null : AppRoutes.splash;
@@ -49,7 +53,13 @@ GoRouter createRouter(AppState appState) {
       if (!appState.isLoggedIn && !isAuthRoute) {
         return AppRoutes.login;
       }
-      if (appState.isLoggedIn && (isAuthRoute || isSplash)) {
+      if (appState.needsMpinSetup && !isMpinSetup) {
+        return AppRoutes.mpinSetup;
+      }
+      if (appState.needsMpinUnlock && !isMpinUnlock) {
+        return AppRoutes.mpinUnlock;
+      }
+      if (appState.isAppUnlocked && (isAuthRoute || isSplash || isMpinRoute)) {
         return AppRoutes.home;
       }
       return null;
@@ -66,6 +76,14 @@ GoRouter createRouter(AppState appState) {
       GoRoute(
         path: AppRoutes.register,
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.mpinSetup,
+        builder: (context, state) => const MpinSetupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.mpinUnlock,
+        builder: (context, state) => const MpinUnlockScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -209,18 +227,15 @@ GoRouter createRouter(AppState appState) {
                     builder: (context, state) => const TaskListScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
                         builder: (context, state) => const TaskFormScreen(),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
                             TaskDetailScreen(id: _intId(state)),
                         routes: [
                           GoRoute(
-                            parentNavigatorKey: rootNavigatorKey,
                             path: 'edit',
                             builder: (context, state) =>
                                 TaskFormScreen(id: _intId(state)),
@@ -234,18 +249,15 @@ GoRouter createRouter(AppState appState) {
                     builder: (context, state) => const NoteListScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
                         builder: (context, state) => const NoteFormScreen(),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
                             NoteDetailScreen(id: _intId(state)),
                         routes: [
                           GoRoute(
-                            parentNavigatorKey: rootNavigatorKey,
                             path: 'edit',
                             builder: (context, state) =>
                                 NoteFormScreen(id: _intId(state)),
@@ -259,18 +271,15 @@ GoRouter createRouter(AppState appState) {
                     builder: (context, state) => const AlarmListScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
                         builder: (context, state) => const AlarmFormScreen(),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
                             ReminderDetailScreen(id: _intId(state)),
                         routes: [
                           GoRoute(
-                            parentNavigatorKey: rootNavigatorKey,
                             path: 'edit',
                             builder: (context, state) =>
                                 AlarmFormScreen(id: _intId(state)),
@@ -284,7 +293,6 @@ GoRouter createRouter(AppState appState) {
                     builder: (context, state) => const ReminderListScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
                         builder: (context, state) => const ReminderFormScreen(),
                       ),
@@ -295,13 +303,11 @@ GoRouter createRouter(AppState appState) {
                             AlarmRingingScreen(id: _intId(state)),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
                             ReminderDetailScreen(id: _intId(state)),
                         routes: [
                           GoRoute(
-                            parentNavigatorKey: rootNavigatorKey,
                             path: 'edit',
                             builder: (context, state) =>
                                 ReminderFormScreen(id: _intId(state)),
@@ -315,13 +321,11 @@ GoRouter createRouter(AppState appState) {
                     builder: (context, state) => const PlannerCalendarScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
                         builder: (context, state) =>
                             const CalendarEventFormScreen(),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
                             CalendarEventFormScreen(id: _intId(state)),
@@ -351,7 +355,7 @@ GoRouter createRouter(AppState appState) {
                       GoRoute(
                         parentNavigatorKey: rootNavigatorKey,
                         path: 'pin',
-                        builder: (context, state) => const PinSetupScreen(),
+                        builder: (context, state) => const ChangeMpinScreen(),
                       ),
                       GoRoute(
                         parentNavigatorKey: rootNavigatorKey,

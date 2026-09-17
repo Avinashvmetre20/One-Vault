@@ -44,6 +44,7 @@ class PasswordItem {
   final DateTime? deletedAt;
 
   PasswordItem copyWith({
+    String? id,
     String? title,
     String? username,
     String? password,
@@ -65,7 +66,7 @@ class PasswordItem {
     bool clearDeletedAt = false,
   }) {
     return PasswordItem(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       username: username ?? this.username,
       password: password ?? this.password,
@@ -112,8 +113,9 @@ class PasswordItem {
 
   factory PasswordItem.fromPayload(Map<String, dynamic> json) {
     final categoryName = json['category'] as String? ?? 'other';
+    final rawId = json['id'] ?? json['passwordId'] ?? json['password_id'] ?? '';
     return PasswordItem(
-      id: json['id'] as String,
+      id: rawId.toString(),
       title: json['title'] as String? ?? '',
       username: json['username'] as String? ?? '',
       password: json['password'] as String? ?? '',
@@ -124,8 +126,8 @@ class PasswordItem {
       ),
       notes: json['notes'] as String? ?? '',
       tags: (json['tags'] as List?)?.map((item) => item.toString()).toList() ?? const [],
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse('${json['createdAt'] ?? json['created_at'] ?? ''}') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse('${json['updatedAt'] ?? json['updated_at'] ?? ''}') ?? DateTime.now(),
       isFavorite: json['isFavorite'] == true,
       version: json['version'] is int ? json['version'] as int : 1,
       recoveryEmail: json['recoveryEmail'] as String? ?? '',

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/app_fields.dart';
@@ -11,6 +12,7 @@ import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../../shared/helpers/confirm.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../data/planner_models.dart';
 import '../../data/planner_service.dart';
@@ -94,7 +96,7 @@ class _TaskListScreenState extends State<TaskListScreen> with PlannerTickReload 
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
+          padding: AppDimensions.pagePaddingFab,
           children: [
             AppSearchField(
               hintText: 'Search tasks',
@@ -263,7 +265,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               subtitle: 'This task is gone.',
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              padding: AppDimensions.pagePadding,
               children: [
                 if (task.description.isNotEmpty) ...[
                   Text(task.description, style: const TextStyle(fontSize: 16, height: 1.5)),
@@ -318,6 +320,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () async {
+                    final confirmed = await showAppConfirm(
+                      context,
+                      title: 'Delete this task?',
+                      message: '${task.title} will be removed. This cannot be undone.',
+                    );
+                    if (!confirmed || !mounted) return;
                     await _run(() => _api.deleteTask(task.id), 'Task deleted');
                     if (mounted) context.pop();
                   },
@@ -508,7 +516,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           maxLines: 4,
         ),
         const SizedBox(height: 16),
-        Text('Priority', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+        Text('Priority', style: TextStyle(color: AppColors.muted(context), fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,

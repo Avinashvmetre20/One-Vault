@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/app_fields.dart';
@@ -98,11 +100,11 @@ class _AlarmListScreenState extends State<AlarmListScreen> with PlannerTickReloa
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 160),
+          padding: AppDimensions.pagePaddingTallFab,
           children: [
             Text(
               'Wake-up alarms keep ringing until you snooze or dismiss.',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: AppColors.muted(context)),
             ),
             const SizedBox(height: 16),
             if (_loading)
@@ -273,7 +275,7 @@ class _AlarmFormScreenState extends State<AlarmFormScreen> {
         const SizedBox(height: 8),
         Text(
           'Rings ${Formatters.dateTime(_when)}',
-          style: TextStyle(color: Colors.grey.shade600),
+          style: TextStyle(color: AppColors.muted(context)),
         ),
         const SizedBox(height: 14),
         AppDropdown<RepeatType>(

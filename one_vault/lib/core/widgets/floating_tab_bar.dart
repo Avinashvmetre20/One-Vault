@@ -137,7 +137,7 @@ class _FloatingTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : const Color(0xFF9CA3AF);
+    final color = selected ? AppColors.primary : AppColors.muted(context);
 
     return Tooltip(
       message: item.label,

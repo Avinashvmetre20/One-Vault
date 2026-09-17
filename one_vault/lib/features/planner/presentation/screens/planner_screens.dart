@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/widgets/empty_state.dart';
-import '../../../../core/widgets/hub_card.dart';
+import '../../../../core/widgets/list_tile_card.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../data/planner_models.dart';
 import '../../data/planner_service.dart';
 import '../../data/reminder_notifications.dart';
@@ -123,7 +125,7 @@ class _PlannerHubScreenState extends State<PlannerHubScreen>
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          padding: AppDimensions.pagePadding,
           children: [
             if (_loading)
               const Padding(
@@ -138,38 +140,43 @@ class _PlannerHubScreenState extends State<PlannerHubScreen>
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Text(
                   'Today · ${_summary.tasksToday} tasks · ${_summary.alarmsToday} alarms · ${_summary.remindersToday} reminders · ${_summary.eventsToday} events',
-                  style: TextStyle(color: Colors.grey.shade600),
+                  style: TextStyle(color: AppColors.muted(context)),
                 ),
               ),
-            HubCard(
+            ListTileCard(
               icon: Icons.check_circle_outline,
               title: 'Tasks',
               subtitle: '${_summary.tasksOpen} open',
               onTap: () => _open(AppRoutes.tasks),
+              margin: AppDimensions.itemSpacing,
             ),
-            HubCard(
+            ListTileCard(
               icon: Icons.sticky_note_2_outlined,
               title: 'Notes',
               subtitle: '${_summary.notesTotal} notes',
               onTap: () => _open(AppRoutes.notes),
+              margin: AppDimensions.itemSpacing,
             ),
-            HubCard(
+            ListTileCard(
               icon: Icons.alarm,
               title: 'Alarms',
               subtitle: '${_summary.alarmsUpcoming} set',
               onTap: () => _open(AppRoutes.alarms),
+              margin: AppDimensions.itemSpacing,
             ),
-            HubCard(
+            ListTileCard(
               icon: Icons.notifications_outlined,
               title: 'Reminders',
               subtitle: '${_summary.remindersUpcoming} upcoming',
               onTap: () => _open(AppRoutes.reminders),
+              margin: AppDimensions.itemSpacing,
             ),
-            HubCard(
+            ListTileCard(
               icon: Icons.calendar_month_outlined,
               title: 'Calendar',
               subtitle: 'Agenda and schedule',
               onTap: () => _open(AppRoutes.calendar),
+              margin: AppDimensions.itemSpacing,
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { pool, connectDB } from "./config/db.js";
 import { initSchema } from "./db/init.js";
+import { loadTimeZones } from "./utils/time.js";
 import authRoutes from "./routes/auth.js";
 import plannerRoutes from "./routes/planner.js";
 import vaultRoutes from "./routes/vault.js";
@@ -40,8 +41,7 @@ app.get("/", (req, res) => {
       calendar: "/api/v1/planner/calendar",
     },
     vault: {
-      meta: "/api/v1/vault/meta",
-      credentials: "/api/v1/vault/credentials",
+      passwords: "/api/v1/vault/passwords",
     },
   });
 });
@@ -52,7 +52,7 @@ app.get("/health", async (req, res) => {
     res.json({
       status: "ok",
       database: "connected",
-      time: result.rows[0].now,
+      time: new Date(result.rows[0].now).toISOString(),
     });
   } catch (error) {
     res.status(500).json({
@@ -85,7 +85,10 @@ app.use((err, req, res, next) => {
 try {
   await connectDB();
   await initSchema();
-  app.listen(PORT, "0.0.0.0");
+  await loadTimeZones();
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`OneVault API listening on http://localhost:${PORT}`);
+  });
 } catch (error) {
   console.error("Failed to start server:", error.message);
   process.exit(1);

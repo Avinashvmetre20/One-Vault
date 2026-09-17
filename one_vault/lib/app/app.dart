@@ -36,6 +36,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     if (_appState.restoreOnStart) {
       unawaited(_appState.restoreSession());
+      unawaited(ReminderNotifications.instance.init());
     } else {
       _onAppStateChanged();
     }
@@ -75,11 +76,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _didRestoreAlarms = false;
       return;
     }
+    if (!_appState.isAppUnlocked) return;
     if (!_didRestoreAlarms) {
       _didRestoreAlarms = true;
-      unawaited(ReminderNotifications.instance.handlePendingLaunch());
+      unawaited(_handlePendingAlarmLaunch());
     }
-    _openPendingAlarmIfReady();
+  }
+
+  Future<void> _handlePendingAlarmLaunch() async {
+    await ReminderNotifications.instance.init();
+    await ReminderNotifications.instance.handlePendingLaunch();
+    if (mounted) _openPendingAlarmIfReady();
   }
 
   void _openTriggered(int reminderId) {
@@ -87,7 +94,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _routeTriggered(int reminderId) async {
-    if (!_appState.isReady || !_appState.isLoggedIn) {
+    if (!_appState.isReady || !_appState.isAppUnlocked) {
       _pendingAlarmId = reminderId;
       return;
     }
@@ -105,7 +112,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _openPendingAlarmIfReady() {
-    if (!_appState.isReady || !_appState.isLoggedIn) return;
+    if (!_appState.isReady || !_appState.isAppUnlocked) return;
     final id = _pendingAlarmId;
     if (id == null) return;
     final path = _router.routeInformationProvider.value.uri.path;
@@ -128,6 +135,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _appState.vault.onBackgrounded();
     } else if (state == AppLifecycleState.resumed) {
       _appState.vault.onResumed();
+    }
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _appState.lockMpin();
     }
   }
 

@@ -3,8 +3,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
+import '../../../../core/widgets/app_fields.dart';
+import '../../../../core/widgets/app_page.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
+import '../../../../core/widgets/info_row.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
@@ -19,46 +24,38 @@ class PhotoListScreen extends StatelessWidget {
     final photos = AppScope.of(context).photos;
     final albums = photos.map((item) => item.album).toSet().toList();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Photos')),
-      floatingActionButton: ShellFab(
+    return AppPage(
+      title: 'Photos',
+      fab: ShellFab(
         heroTag: 'fab-photos',
         tooltip: 'Add photo',
         onPressed: () => context.push(AppRoutes.photoNew),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
-        children: [
-          Text('Albums', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: albums
-                .map((album) => Chip(label: Text(album)))
-                .toList(),
-          ),
-          const SizedBox(height: 16),
-          if (photos.isEmpty)
-            const EmptyState(
-              icon: Icons.photo_outlined,
-              title: 'No photos',
-              subtitle: 'Add a photo placeholder to this album.',
-            )
-          else
-            ...photos.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: ListTileCard(
-                  icon: item.isPrivate ? Icons.lock_outline : Icons.photo_outlined,
-                  title: item.name,
-                  subtitle:
-                      '${item.album} · ${item.sizeLabel} · ${Formatters.date(item.createdAt)}',
-                  onTap: () => context.push(AppRoutes.photoDetail(item.id)),
-                ),
-              ),
+      children: [
+        Text('Albums', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: albums.map((album) => Chip(label: Text(album))).toList(),
+        ),
+        AppDimensions.sectionGap,
+        if (photos.isEmpty)
+          const EmptyState(
+            icon: Icons.photo_outlined,
+            title: 'No photos',
+            subtitle: 'Add a photo placeholder to this album.',
+          )
+        else
+          ...photos.map(
+            (item) => ListTileCard(
+              icon: item.isPrivate ? Icons.lock_outline : Icons.photo_outlined,
+              title: item.name,
+              subtitle: '${item.album} · ${item.sizeLabel} · ${Formatters.date(item.createdAt)}',
+              onTap: () => context.push(AppRoutes.photoDetail(item.id)),
+              margin: AppDimensions.itemSpacing,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -72,43 +69,35 @@ class PhotoDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = AppScope.of(context).photos.where((entry) => entry.id == id).firstOrNull;
     if (item == null) {
-      return const Scaffold(
-        body: EmptyState(
-          icon: Icons.photo_outlined,
-          title: 'Not found',
-          subtitle: 'This photo is not in the vault.',
-        ),
+      return const AppMissingPage(
+        icon: Icons.photo_outlined,
+        title: 'Not found',
+        subtitle: 'This photo is not in the vault.',
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: Text(item.name)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          Container(
-            height: 220,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(Icons.photo, size: 72, color: Color(0xFF2563EB)),
+    return AppDetailPage(
+      title: item.name,
+      children: [
+        Container(
+          height: 220,
+          decoration: BoxDecoration(
+            color: AppColors.wash(context),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           ),
-          const SizedBox(height: 20),
-          Text('Album: ${item.album}'),
-          const SizedBox(height: 8),
-          Text('Size: ${item.sizeLabel}'),
-          const SizedBox(height: 8),
-          Text('Taken: ${Formatters.date(item.createdAt)}'),
-          const SizedBox(height: 8),
-          Text(item.isPrivate ? 'Private photo' : 'Visible in album'),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: () => showAppSnack(context, 'Image viewer will be added later'),
-            child: const Text('Open viewer'),
-          ),
-        ],
-      ),
+          child: const Icon(Icons.photo, size: 72, color: AppColors.primary),
+        ),
+        const SizedBox(height: 20),
+        InfoRow(label: 'Album', value: item.album),
+        InfoRow(label: 'Size', value: item.sizeLabel),
+        InfoRow(label: 'Taken', value: Formatters.date(item.createdAt)),
+        InfoRow(label: 'Visibility', value: item.isPrivate ? 'Private photo' : 'Visible in album'),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: () => showAppSnack(context, 'Image viewer will be added later'),
+          child: const Text('Open viewer'),
+        ),
+      ],
     );
   }
 }
@@ -154,15 +143,9 @@ class _PhotoFormScreenState extends State<PhotoFormScreen> {
         context.pop();
       },
       children: [
-        TextField(
-          controller: _name,
-          decoration: const InputDecoration(labelText: 'Photo name'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _album,
-          decoration: const InputDecoration(labelText: 'Album'),
-        ),
+        AppTextField(controller: _name, label: 'Photo name'),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _album, label: 'Album'),
       ],
     );
   }

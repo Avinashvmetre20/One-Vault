@@ -4,12 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/app_fields.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../../shared/helpers/confirm.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../data/planner_models.dart';
 import '../../data/planner_service.dart';
@@ -68,8 +70,11 @@ class _PlannerCalendarScreenState extends State<PlannerCalendarScreen>
     }
   }
 
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _sameDay(DateTime a, DateTime b) {
+    final left = a.toLocal();
+    final right = b.toLocal();
+    return left.year == right.year && left.month == right.month && left.day == right.day;
+  }
 
   List<Widget> _itemsFor(DateTime day) {
     final cards = <Widget>[];
@@ -104,10 +109,12 @@ class _PlannerCalendarScreenState extends State<PlannerCalendarScreen>
       }
     }
     for (final event in _data.events) {
-      final overlaps = _sameDay(event.startAt, day) ||
-          (event.endAt != null &&
-              !day.isBefore(DateTime(event.startAt.year, event.startAt.month, event.startAt.day)) &&
-              !day.isAfter(DateTime(event.endAt!.year, event.endAt!.month, event.endAt!.day)));
+      final start = event.startAt.toLocal();
+      final end = (event.endAt ?? event.startAt).toLocal();
+      final startDay = DateTime(start.year, start.month, start.day);
+      final endDay = DateTime(end.year, end.month, end.day);
+      final dayStart = DateTime(day.year, day.month, day.day);
+      final overlaps = !dayStart.isBefore(startDay) && !dayStart.isAfter(endDay);
       if (overlaps) {
         cards.add(
           Padding(
@@ -150,7 +157,7 @@ class _PlannerCalendarScreenState extends State<PlannerCalendarScreen>
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
+          padding: AppDimensions.pagePaddingFab,
           children: [
             Row(
               children: [
@@ -238,7 +245,7 @@ class _MonthGrid extends StatelessWidget {
     final startWeekday = first.weekday % 7;
     final tiles = <Widget>[
       for (final label in const ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
-        Center(child: Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
+        Center(child: Text(label, style: TextStyle(color: AppColors.muted(context), fontSize: 12))),
       for (var i = 0; i < startWeekday; i++) const SizedBox.shrink(),
       for (var day = 1; day <= daysInMonth; day++)
         _DayCell(
@@ -324,8 +331,8 @@ class _CalendarEventFormScreenState extends State<CalendarEventFormScreen> {
       setState(() {
         _title.text = event.title;
         _description.text = event.description;
-        _start = event.startAt;
-        _end = event.endAt;
+        _start = event.startAt.toLocal();
+        _end = event.endAt?.toLocal();
         _allDay = event.isAllDay;
         _repeat = event.repeatType;
       });
@@ -449,6 +456,12 @@ class _CalendarEventFormScreenState extends State<CalendarEventFormScreen> {
         if (widget.id != null)
           TextButton(
             onPressed: () async {
+              final confirmed = await showAppConfirm(
+                context,
+                title: 'Delete this event?',
+                message: 'This calendar event will be removed. This cannot be undone.',
+              );
+              if (!confirmed || !mounted) return;
               await _api.deleteCalendarEvent(widget.id!);
               if (!mounted) return;
               showAppSnack(context, 'Event deleted');

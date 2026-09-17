@@ -78,7 +78,7 @@ export const asReminderKind = (value, fallback = "reminder") => {
 
 export const asDate = (value) => {
   if (value == null || value === "") return null;
-  const text = String(value).slice(0, 10);
+  const text = String(value).trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
   return text;
 };
@@ -102,36 +102,24 @@ export const asInterval = (value, fallback = 1) => {
   return Number.isInteger(interval) && interval >= 1 ? interval : null;
 };
 
-export const nextOccurrence = (from, repeatType, interval = 1) => {
-  if (!from || repeatType === "none") return null;
-  const date = new Date(from);
-  if (Number.isNaN(date.getTime())) return null;
-  const n = Math.max(1, interval);
-
-  switch (repeatType) {
-    case "daily":
-    case "custom":
-      date.setUTCDate(date.getUTCDate() + n);
-      break;
-    case "weekly":
-      date.setUTCDate(date.getUTCDate() + 7 * n);
-      break;
-    case "monthly":
-      date.setUTCMonth(date.getUTCMonth() + n);
-      break;
-    case "yearly":
-      date.setUTCFullYear(date.getUTCFullYear() + n);
-      break;
-    default:
-      return null;
-  }
-
-  return date;
-};
-
 export const nextDateOnly = (from, repeatType, interval = 1) => {
-  const next = nextOccurrence(`${from}T00:00:00.000Z`, repeatType, interval);
-  return next ? next.toISOString().slice(0, 10) : null;
+  if (!from || repeatType === "none") return null;
+  const [year, month, day] = String(from).slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const n = Math.max(1, interval);
+  if (repeatType === "monthly" || repeatType === "yearly") {
+    const addMonths = repeatType === "yearly" ? 12 * n : n;
+    const total = year * 12 + (month - 1) + addMonths;
+    const nextYear = Math.floor(total / 12);
+    const nextMonth = total % 12;
+    const lastDay = new Date(Date.UTC(nextYear, nextMonth + 1, 0)).getUTCDate();
+    const nextDay = Math.min(day, lastDay);
+    return `${String(nextYear).padStart(4, "0")}-${String(nextMonth + 1).padStart(2, "0")}-${String(nextDay).padStart(2, "0")}`;
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (repeatType === "weekly") date.setUTCDate(date.getUTCDate() + 7 * n);
+  else date.setUTCDate(date.getUTCDate() + n);
+  return date.toISOString().slice(0, 10);
 };
 
 export const formatDueTime = (value) => {
@@ -142,10 +130,16 @@ export const formatDueTime = (value) => {
 
 export const formatDateOnly = (value) => {
   if (!value) return null;
-  if (typeof value === "string") return value.slice(0, 10);
-  const date = new Date(value);
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 export const mapTask = (row, subtasks = []) => {

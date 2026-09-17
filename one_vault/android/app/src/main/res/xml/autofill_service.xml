@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <autofill-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:settingsActivity="com.example.one_vault.MainActivity">
+    android:settingsActivity="in.avinashvmetre20.one_vault.MainActivity">
     <!-- Chrome 137+ uses native Android Autofill. Keep compatibility only for older Chrome. -->
     <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="711900039" />
     <compatibility-package android:name="com.chrome.beta" android:maxLongVersionCode="711900039" />

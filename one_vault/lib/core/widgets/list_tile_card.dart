@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
+import 'app_icon_badge.dart';
 
 class ListTileCard extends StatelessWidget {
   const ListTileCard({
@@ -11,6 +12,7 @@ class ListTileCard extends StatelessWidget {
     required this.subtitle,
     this.trailing,
     this.onTap,
+    this.margin = EdgeInsets.zero,
   });
 
   final IconData icon;
@@ -18,10 +20,11 @@ class ListTileCard extends StatelessWidget {
   final String subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final EdgeInsetsGeometry margin;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final card = Material(
       color: Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
       child: InkWell(
@@ -32,19 +35,11 @@ class ListTileCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: AppColors.line(context)),
           ),
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.iconWash,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-                ),
-                child: Icon(icon, color: AppColors.primary),
-              ),
+              AppIconBadge(icon: icon),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -61,18 +56,19 @@ class ListTileCard extends StatelessWidget {
                       subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 13, color: AppColors.muted(context)),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               trailing ??
-                  Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  Icon(Icons.chevron_right, color: AppColors.muted(context)),
             ],
           ),
         ),
       ),
     );
+    return Padding(padding: margin, child: card);
   }
 }

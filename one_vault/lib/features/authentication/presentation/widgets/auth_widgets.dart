@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_dimensions.dart';
+import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_fields.dart';
 
 class AuthScaffold extends StatelessWidget {
   const AuthScaffold({
@@ -20,7 +22,7 @@ class AuthScaffold extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          padding: AppDimensions.pagePaddingAuth,
           children: [
             Container(
               width: double.infinity,
@@ -98,26 +100,21 @@ class AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return AppTextField(
       controller: controller,
+      label: label,
       keyboardType: keyboardType,
       obscureText: obscureText,
       textInputAction: textInputAction,
       autofillHints: autofillHints,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        suffixIcon: onToggleObscure == null
-            ? null
-            : IconButton(
-                onPressed: onToggleObscure,
-                icon: Icon(
-                  obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                ),
+      suffixIcon: onToggleObscure == null
+          ? null
+          : IconButton(
+              onPressed: onToggleObscure,
+              icon: Icon(
+                obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
               ),
-      ),
+            ),
     );
   }
 }
@@ -136,19 +133,10 @@ class AuthSubmitButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: loading ? null : onPressed,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: loading
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+    return AppPrimaryButton(
+      label: label,
+      loading: loading,
+      onPressed: onPressed,
     );
   }
 }
@@ -171,7 +159,7 @@ class AuthFooter extends StatelessWidget {
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(prompt, style: TextStyle(color: Colors.grey.shade600)),
+        Text(prompt, style: TextStyle(color: AppColors.muted(context))),
         TextButton(
           onPressed: onPressed,
           child: Text(actionLabel),

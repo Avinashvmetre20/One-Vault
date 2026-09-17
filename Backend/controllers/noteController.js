@@ -14,17 +14,11 @@ import {
 const userId = (req) => req.user.user_id;
 
 const noteSelect = `
-  SELECT n.note_id, n.user_id, n.category_id, n.title, n.content,
-         n.is_pinned, n.is_favorite, n.is_archived, n.created_at, n.updated_at,
-         c.name AS category_name,
-         COALESCE((
-           SELECT json_agg(t.name ORDER BY t.name)
-           FROM note_tag_mapping m
-           JOIN note_tags t ON t.note_tag_id = m.note_tag_id
-           WHERE m.note_id = n.note_id
-         ), '[]'::json) AS tags
+  SELECT n.note_id, n.user_id, n.note_category_id AS category_id, n.title, n.content,
+         n.tags, n.is_pinned, n.is_favorite, n.is_archived, n.created_at, n.updated_at,
+         c.name AS category_name
   FROM notes n
-  LEFT JOIN note_categories c ON c.note_category_id = n.category_id
+  LEFT JOIN note_categories c ON c.note_category_id = n.note_category_id
 `;
 
 const loadNote = async (noteId, authUserId) => {
@@ -45,30 +39,17 @@ const ownedNoteCategory = async (categoryId, authUserId) => {
   return result.rowCount > 0;
 };
 
-const syncTags = async (client, authUserId, noteId, tags) => {
-  await client.query(`DELETE FROM note_tag_mapping WHERE note_id = $1`, [noteId]);
-  const names = [...new Set(tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean))];
-  for (const name of names) {
-    const existing = await client.query(
-      `SELECT note_tag_id FROM note_tags WHERE user_id = $1 AND LOWER(name) = $2`,
-      [authUserId, name]
-    );
-    let tagId = existing.rows[0]?.note_tag_id;
-    if (!tagId) {
-      const created = await client.query(
-        `INSERT INTO note_tags (user_id, name) VALUES ($1, $2)
-         RETURNING note_tag_id`,
-        [authUserId, name]
-      );
-      tagId = created.rows[0].note_tag_id;
-    }
-    await client.query(
-      `INSERT INTO note_tag_mapping (note_id, note_tag_id)
-       VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [noteId, tagId]
-    );
-  }
+const asTags = (value) => {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  return [
+    ...new Set(
+      value
+        .map((item) => String(item).trim().toLowerCase())
+        .filter(Boolean)
+        .map((item) => item.slice(0, 40))
+    ),
+  ].slice(0, 20);
 };
 
 export const listNoteCategories = async (req, res) => {
@@ -165,7 +146,7 @@ export const listNotes = async (req, res) => {
       const id = parseId(categoryId);
       if (!id) return fail(res, 400, "Invalid category id");
       params.push(id);
-      filters.push(`n.category_id = $${params.length}`);
+      filters.push(`n.note_category_id = $${params.length}`);
     }
 
     const search = String(req.query.search || req.query.q || "").trim();
@@ -175,9 +156,7 @@ export const listNotes = async (req, res) => {
         n.title ILIKE $${params.length}
         OR n.content ILIKE $${params.length}
         OR EXISTS (
-          SELECT 1 FROM note_tag_mapping m
-          JOIN note_tags t ON t.note_tag_id = m.note_tag_id
-          WHERE m.note_id = n.note_id AND t.name ILIKE $${params.length}
+          SELECT 1 FROM unnest(n.tags) AS tag WHERE tag ILIKE $${params.length}
         )
       )`);
     }
@@ -241,44 +220,42 @@ const parseNoteInput = async (body, authUserId, { partial = false } = {}) => {
     return { error: "Category not found" };
   }
 
+  const tagsValue = pick(body, "tags");
+  let tags;
+  if (tagsValue === undefined) tags = undefined;
+  else {
+    tags = asTags(tagsValue);
+    if (!tags) return { error: "Invalid tags" };
+  }
+
   return {
     title: title.value,
     content: content.value,
     categoryId,
-    tags: Array.isArray(body.tags) ? body.tags : undefined,
+    tags,
   };
 };
 
 export const createNote = async (req, res) => {
-  const client = await pool.connect();
   try {
     const parsed = await parseNoteInput(req.body, userId(req));
     if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
-    await client.query("BEGIN");
-    const created = await client.query(
-      `INSERT INTO notes (user_id, category_id, title, content)
-       VALUES ($1, $2, $3, $4)
+    const created = await pool.query(
+      `INSERT INTO notes (user_id, note_category_id, title, content, tags)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING note_id`,
-      [userId(req), parsed.categoryId ?? null, parsed.title, parsed.content]
+      [userId(req), parsed.categoryId ?? null, parsed.title, parsed.content, parsed.tags || []]
     );
-    const noteId = created.rows[0].note_id;
-    if (parsed.tags) await syncTags(client, userId(req), noteId, parsed.tags);
-    await client.query("COMMIT");
-
-    const note = await loadNote(noteId, userId(req));
+    const note = await loadNote(created.rows[0].note_id, userId(req));
     return ok(res, { note: toCamel(note) }, { status: 201, message: "Note created" });
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
     console.error("Create note error:", error);
     return fail(res, 500, "Could not create note");
-  } finally {
-    client.release();
   }
 };
 
 export const updateNote = async (req, res) => {
-  const client = await pool.connect();
   try {
     const id = parseId(req.params.id);
     if (!id) return fail(res, 400, "Invalid note id");
@@ -288,30 +265,25 @@ export const updateNote = async (req, res) => {
     const parsed = await parseNoteInput(req.body, userId(req), { partial: true });
     if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
-    await client.query("BEGIN");
-    await client.query(
+    await pool.query(
       `UPDATE notes
-       SET title = $1, content = $2, category_id = $3, updated_at = NOW()
-       WHERE note_id = $4 AND user_id = $5`,
+       SET title = $1, content = $2, note_category_id = $3, tags = $4, updated_at = NOW()
+       WHERE note_id = $5 AND user_id = $6`,
       [
         parsed.title || existing.title,
         parsed.content === undefined ? existing.content : parsed.content,
         parsed.categoryId === undefined ? existing.category_id : parsed.categoryId,
+        parsed.tags === undefined ? existing.tags : parsed.tags,
         id,
         userId(req),
       ]
     );
-    if (parsed.tags) await syncTags(client, userId(req), id, parsed.tags);
-    await client.query("COMMIT");
 
     const note = await loadNote(id, userId(req));
     return ok(res, { note: toCamel(note) }, { message: "Note updated" });
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
     console.error("Update note error:", error);
     return fail(res, 500, "Could not update note");
-  } finally {
-    client.release();
   }
 };
 

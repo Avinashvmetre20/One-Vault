@@ -1,12 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
-import 'features/planner/data/reminder_notifications.dart';
 
-export 'app/app.dart';
-
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await ReminderNotifications.instance.init();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (kDebugMode) debugPrint('ERROR $error');
+    return true;
+  };
   runApp(const MyApp());
 }

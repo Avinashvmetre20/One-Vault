@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/app_fields.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/section_title.dart';
@@ -24,7 +26,7 @@ class FinanceDashboardScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Money')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: AppDimensions.pagePadding,
         children: [
           Row(
             children: [
@@ -115,7 +117,7 @@ class _MoneyStat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600)),
+          Text(label, style: TextStyle(color: AppColors.muted(context))),
           const SizedBox(height: 6),
           Text(
             value,
@@ -140,7 +142,7 @@ class AccountsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Accounts')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: AppDimensions.pagePadding,
         children: [
           ...state.accounts.map(
             (account) => Padding(
@@ -179,7 +181,7 @@ class TransactionsScreen extends StatelessWidget {
         onPressed: () => context.push(AppRoutes.transactionNew),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
+        padding: AppDimensions.pagePaddingFab,
         children: [
           ...state.transactions.map(
             (txn) => Padding(
@@ -280,39 +282,28 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         context.pop();
       },
       children: [
-        TextField(
+        AppTextField(
           controller: _amount,
+          label: 'Amount (₹)',
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Amount (₹)'),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _merchant,
-          decoration: const InputDecoration(labelText: 'Merchant'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _category,
-          decoration: const InputDecoration(labelText: 'Category'),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<TransactionType>(
-          initialValue: _type,
-          decoration: const InputDecoration(labelText: 'Type'),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _merchant, label: 'Merchant'),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _category, label: 'Category'),
+        AppDimensions.fieldGap,
+        AppDropdown<TransactionType>(
+          label: 'Type',
+          value: _type,
           items: TransactionType.values
-              .map(
-                (item) => DropdownMenuItem(
-                  value: item,
-                  child: Text(item.name),
-                ),
-              )
+              .map((item) => DropdownMenuItem(value: item, child: Text(item.name)))
               .toList(),
           onChanged: (value) => setState(() => _type = value ?? _type),
         ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: _accountId,
-          decoration: const InputDecoration(labelText: 'Account'),
+        AppDimensions.fieldGap,
+        AppDropdown<String>(
+          label: 'Account',
+          value: _accountId,
           items: accounts
               .map((item) => DropdownMenuItem(value: item.id, child: Text(item.name)))
               .toList(),

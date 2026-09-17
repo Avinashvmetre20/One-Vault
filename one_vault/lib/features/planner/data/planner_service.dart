@@ -77,7 +77,7 @@ class PlannerService {
     final json = await _mutate(
       () => _api.post(
         '$_base/task-categories',
-        headers: _jsonHeaders(),
+        headers: _headers(json: true),
         body: jsonEncode({'name': name}),
       ),
     );
@@ -123,7 +123,7 @@ class PlannerService {
 
   Future<PlannerTask> createTask(Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.post('$_base/tasks', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.post('$_base/tasks', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return PlannerTask.fromJson(
       (json['data'] as Map<String, dynamic>)['task'] as Map<String, dynamic>,
@@ -132,7 +132,7 @@ class PlannerService {
 
   Future<PlannerTask> updateTask(int id, Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.patch('$_base/tasks/$id', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.patch('$_base/tasks/$id', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return PlannerTask.fromJson(
       (json['data'] as Map<String, dynamic>)['task'] as Map<String, dynamic>,
@@ -153,7 +153,7 @@ class PlannerService {
     final json = await _mutate(
       () => _api.post(
         '$_base/tasks/$id/complete',
-        headers: _jsonHeaders(),
+        headers: _headers(json: true),
         body: jsonEncode({'reopen': reopen}),
       ),
     );
@@ -170,7 +170,7 @@ class PlannerService {
 
   Future<PlannerTask> archiveTask(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/tasks/$id/archive', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/tasks/$id/archive', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerTask.fromJson(
       (json['data'] as Map<String, dynamic>)['task'] as Map<String, dynamic>,
@@ -179,7 +179,7 @@ class PlannerService {
 
   Future<PlannerTask> restoreTask(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/tasks/$id/restore', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/tasks/$id/restore', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerTask.fromJson(
       (json['data'] as Map<String, dynamic>)['task'] as Map<String, dynamic>,
@@ -190,7 +190,7 @@ class PlannerService {
     final json = await _mutate(
       () => _api.post(
         '$_base/tasks/$taskId/subtasks',
-        headers: _jsonHeaders(),
+        headers: _headers(json: true),
         body: jsonEncode({'title': title}),
       ),
     );
@@ -209,7 +209,7 @@ class PlannerService {
     final json = await _mutate(
       () => _api.patch(
         '$_base/tasks/$taskId/subtasks/$subtaskId',
-        headers: _jsonHeaders(),
+        headers: _headers(json: true),
         body: jsonEncode({
           if (title != null) 'title': title,
           if (isCompleted != null) 'isCompleted': isCompleted,
@@ -269,7 +269,7 @@ class PlannerService {
 
   Future<PlannerNote> createNote(Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.post('$_base/notes', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.post('$_base/notes', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return PlannerNote.fromJson(
       (json['data'] as Map<String, dynamic>)['note'] as Map<String, dynamic>,
@@ -278,7 +278,7 @@ class PlannerService {
 
   Future<PlannerNote> updateNote(int id, Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.patch('$_base/notes/$id', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.patch('$_base/notes/$id', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return PlannerNote.fromJson(
       (json['data'] as Map<String, dynamic>)['note'] as Map<String, dynamic>,
@@ -291,7 +291,7 @@ class PlannerService {
 
   Future<PlannerNote> pinNote(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/notes/$id/pin', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/notes/$id/pin', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerNote.fromJson(
       (json['data'] as Map<String, dynamic>)['note'] as Map<String, dynamic>,
@@ -300,7 +300,7 @@ class PlannerService {
 
   Future<PlannerNote> favoriteNote(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/notes/$id/favorite', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/notes/$id/favorite', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerNote.fromJson(
       (json['data'] as Map<String, dynamic>)['note'] as Map<String, dynamic>,
@@ -309,7 +309,7 @@ class PlannerService {
 
   Future<PlannerNote> archiveNote(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/notes/$id/archive', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/notes/$id/archive', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerNote.fromJson(
       (json['data'] as Map<String, dynamic>)['note'] as Map<String, dynamic>,
@@ -318,7 +318,7 @@ class PlannerService {
 
   Future<PlannerNote> restoreNote(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/notes/$id/restore', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/notes/$id/restore', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerNote.fromJson(
       (json['data'] as Map<String, dynamic>)['note'] as Map<String, dynamic>,
@@ -362,7 +362,7 @@ class PlannerService {
 
   Future<PlannerReminder> createReminder(Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.post('$_base/reminders', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.post('$_base/reminders', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return PlannerReminder.fromJson(
       (json['data'] as Map<String, dynamic>)['reminder'] as Map<String, dynamic>,
@@ -371,7 +371,7 @@ class PlannerService {
 
   Future<PlannerReminder> updateReminder(int id, Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.patch('$_base/reminders/$id', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.patch('$_base/reminders/$id', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return PlannerReminder.fromJson(
       (json['data'] as Map<String, dynamic>)['reminder'] as Map<String, dynamic>,
@@ -386,7 +386,7 @@ class PlannerService {
     final json = await _mutate(
       () => _api.post(
         '$_base/reminders/$id/complete',
-        headers: _jsonHeaders(),
+        headers: _headers(json: true),
         body: jsonEncode({'reopen': reopen}),
       ),
     );
@@ -399,7 +399,7 @@ class PlannerService {
     final json = await _mutate(
       () => _api.post(
         '$_base/reminders/$id/snooze',
-        headers: _jsonHeaders(),
+        headers: _headers(json: true),
         body: jsonEncode({
           'minutes': minutes,
           if (until != null) 'snoozedUntil': until.toUtc().toIso8601String(),
@@ -413,7 +413,7 @@ class PlannerService {
 
   Future<PlannerReminder> cancelReminder(int id) async {
     final json = await _mutate(
-      () => _api.post('$_base/reminders/$id/cancel', headers: _jsonHeaders(), body: jsonEncode({})),
+      () => _api.post('$_base/reminders/$id/cancel', headers: _headers(json: true), body: jsonEncode({})),
     );
     return PlannerReminder.fromJson(
       (json['data'] as Map<String, dynamic>)['reminder'] as Map<String, dynamic>,
@@ -453,7 +453,7 @@ class PlannerService {
 
   Future<CalendarEvent> createCalendarEvent(Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.post('$_base/calendar', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.post('$_base/calendar', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return CalendarEvent.fromJson(
       (json['data'] as Map<String, dynamic>)['event'] as Map<String, dynamic>,
@@ -462,7 +462,7 @@ class PlannerService {
 
   Future<CalendarEvent> updateCalendarEvent(int id, Map<String, dynamic> body) async {
     final json = await _mutate(
-      () => _api.patch('$_base/calendar/$id', headers: _jsonHeaders(), body: jsonEncode(body)),
+      () => _api.patch('$_base/calendar/$id', headers: _headers(json: true), body: jsonEncode(body)),
     );
     return CalendarEvent.fromJson(
       (json['data'] as Map<String, dynamic>)['event'] as Map<String, dynamic>,
@@ -501,14 +501,8 @@ class PlannerService {
     );
   }
 
-  Map<String, String> _headers() => {
-    'Authorization': 'Bearer ${_token() ?? ''}',
-  };
-
-  Map<String, String> _jsonHeaders() => {
-    ..._headers(),
-    'Content-Type': 'application/json',
-  };
+  Map<String, String> _headers({bool json = false}) =>
+      ApiClient.authHeaders(_token(), json: json);
 
   Future<Map<String, dynamic>> _mutate(
     Future<http.Response> Function() request,
@@ -522,25 +516,14 @@ class PlannerService {
     Future<http.Response> Function() request,
   ) async {
     try {
-      final response = await request();
-      final decoded = response.body.isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return decoded;
-      }
-
-      throw PlannerException(
-        (decoded['message'] as String?) ?? 'Request failed',
-        statusCode: response.statusCode,
+      return await ApiClient.readJson(
+        request,
+        onError: (message, status) => PlannerException(message, statusCode: status),
       );
     } on PlannerException {
       rethrow;
     } on TimeoutException {
-      throw PlannerException(
-        'Request timed out for ${ApiConfig.baseUrl}.',
-      );
+      throw PlannerException('Request timed out for ${ApiConfig.baseUrl}.');
     } catch (_) {
       throw PlannerException(
         'Cannot reach ${ApiConfig.baseUrl}. Check Wi-Fi and that the API is running.',

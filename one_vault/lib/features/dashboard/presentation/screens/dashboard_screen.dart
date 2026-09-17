@@ -138,7 +138,7 @@ class _HomeHeader extends StatelessWidget {
               Text(
                 _greetingFor(DateTime.now()),
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.grey.shade600,
+                  color: AppColors.muted(context),
                 ),
               ),
               const SizedBox(height: 4),
@@ -154,7 +154,7 @@ class _HomeHeader extends StatelessWidget {
               Text(
                 Formatters.weekdayDate(DateTime.now()),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade600,
+                  color: AppColors.muted(context),
                 ),
               ),
             ],
@@ -170,7 +170,7 @@ class _HomeHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: AppColors.line(context)),
             ),
             child: const Icon(Icons.person_outline, size: 26),
           ),
@@ -321,7 +321,7 @@ class _StatChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          Text(label, style: TextStyle(color: AppColors.muted(context), fontSize: 13)),
           const SizedBox(height: 6),
           Text(
             value,

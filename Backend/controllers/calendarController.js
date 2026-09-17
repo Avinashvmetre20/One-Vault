@@ -1,7 +1,7 @@
 import { pool } from "../config/db.js";
 import {
   asBoolean,
-  asDateTime,
+  asDate,
   asInterval,
   asRepeatType,
   clampText,
@@ -12,13 +12,25 @@ import {
   pick,
   toCamel,
 } from "../utils/planner.js";
+import {
+  civilDaysBetween,
+  MAX_RANGE_DAYS,
+  occurrenceJoin,
+  parseInstant,
+  requestTimeZone,
+  shiftCivilDate,
+} from "../utils/time.js";
 
 const userId = (req) => req.user.user_id;
 
+const EVENT_COLUMNS = `
+  calendar_event_id, user_id, title, description, start_at, end_at,
+  is_all_day, repeat_type, repeat_interval, time_zone, created_at, updated_at
+`;
+
 const loadEvent = async (eventId, authUserId) => {
   const result = await pool.query(
-    `SELECT calendar_event_id, user_id, title, description, start_at, end_at,
-            is_all_day, repeat_type, repeat_interval, created_at, updated_at
+    `SELECT ${EVENT_COLUMNS}
      FROM calendar_events
      WHERE calendar_event_id = $1 AND user_id = $2`,
     [eventId, authUserId]
@@ -26,7 +38,7 @@ const loadEvent = async (eventId, authUserId) => {
   return result.rows[0] || null;
 };
 
-const parseEventInput = (body, { partial = false } = {}) => {
+const parseEventInput = async (body, { partial = false, timeZone } = {}) => {
   const titleRaw = pick(body, "title");
   const title = titleRaw === undefined && partial
     ? { value: undefined }
@@ -38,14 +50,24 @@ const parseEventInput = (body, { partial = false } = {}) => {
     : clampText(descriptionRaw, { max: 5000 });
   if (description.error) return { error: description.error };
 
+  const isAllDayValue = pick(body, "isAllDay", "is_all_day");
+  const isAllDay = isAllDayValue === undefined ? undefined : asBoolean(isAllDayValue, false);
+
   const startValue = pick(body, "startAt", "start_at");
-  const startAt = startValue === undefined ? undefined : asDateTime(startValue);
+  let startAt = startValue === undefined ? undefined : await parseInstant(startValue, timeZone);
   if (!partial && !startAt) return { error: "Start date and time are required" };
   if (startValue !== undefined && startAt === undefined) return { error: "Invalid start date" };
 
   const endValue = pick(body, "endAt", "end_at");
-  const endAt = endValue === undefined ? undefined : asDateTime(endValue);
+  let endAt = endValue === undefined ? undefined : await parseInstant(endValue, timeZone);
   if (endValue !== undefined && endAt === undefined) return { error: "Invalid end date" };
+
+  if (isAllDay && startValue != null && /^\d{4}-\d{2}-\d{2}$/.test(String(startValue).trim())) {
+    startAt = await parseInstant(`${String(startValue).trim()} 00:00:00`, timeZone);
+  }
+  if (isAllDay && endValue != null && /^\d{4}-\d{2}-\d{2}$/.test(String(endValue).trim())) {
+    endAt = await parseInstant(`${String(endValue).trim()} 23:59:59`, timeZone);
+  }
 
   const repeatValue = pick(body, "repeatType", "repeat_type");
   const repeatType = repeatValue == null ? (partial ? undefined : "none") : asRepeatType(repeatValue);
@@ -55,8 +77,6 @@ const parseEventInput = (body, { partial = false } = {}) => {
   const repeatInterval = intervalValue == null ? (partial ? undefined : 1) : asInterval(intervalValue);
   if (intervalValue != null && !repeatInterval) return { error: "Invalid repeat interval" };
 
-  const isAllDayValue = pick(body, "isAllDay", "is_all_day");
-
   return {
     title: title.value,
     description: description.value,
@@ -64,7 +84,8 @@ const parseEventInput = (body, { partial = false } = {}) => {
     endAt,
     repeatType,
     repeatInterval,
-    isAllDay: isAllDayValue === undefined ? undefined : asBoolean(isAllDayValue, false),
+    isAllDay,
+    timeZone,
   };
 };
 
@@ -72,40 +93,69 @@ export const listCalendarEvents = async (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
     const authUserId = userId(req);
-    const filters = ["user_id = $1"];
+    const tz = await requestTimeZone(req);
+    const filters = ["e.user_id = $1"];
     const params = [authUserId];
 
     const search = String(req.query.search || req.query.q || "").trim();
     if (search) {
       params.push(`%${search}%`);
-      filters.push(`(title ILIKE $${params.length} OR description ILIKE $${params.length})`);
+      filters.push(`(e.title ILIKE $${params.length} OR e.description ILIKE $${params.length})`);
     }
 
-    const from = req.query.from ? asDateTime(req.query.from) : null;
-    const to = req.query.to ? asDateTime(req.query.to) : null;
-    if (req.query.from && from === undefined) return fail(res, 400, "Invalid from date");
-    if (req.query.to && to === undefined) return fail(res, 400, "Invalid to date");
-    if (from) {
-      params.push(from);
-      filters.push(`COALESCE(end_at, start_at) >= $${params.length}`);
-    }
-    if (to) {
-      params.push(to);
-      filters.push(`start_at <= $${params.length}`);
+    const fromRaw = req.query.from;
+    const toRaw = req.query.to;
+    const ranged = Boolean(fromRaw || toRaw);
+    let tzIdx = null;
+    let fromIdx = null;
+    let toIdx = null;
+
+    if (ranged) {
+      params.push(tz);
+      tzIdx = params.length;
+      let fromDate = fromRaw ? asDate(fromRaw) : null;
+      let toDate = toRaw ? asDate(toRaw) : null;
+      if (fromRaw && fromDate === undefined) return fail(res, 400, "from must be YYYY-MM-DD");
+      if (toRaw && toDate === undefined) return fail(res, 400, "to must be YYYY-MM-DD");
+      if (!fromDate && toDate) fromDate = shiftCivilDate(toDate, -MAX_RANGE_DAYS);
+      if (!toDate && fromDate) toDate = shiftCivilDate(fromDate, MAX_RANGE_DAYS);
+      if (!fromDate || !toDate) return fail(res, 400, "Invalid date range");
+      if (fromDate > toDate) return fail(res, 400, "from must be on or before to");
+      if ((civilDaysBetween(fromDate, toDate) ?? 0) > MAX_RANGE_DAYS) {
+        return fail(res, 400, "Date range must be at most 366 days");
+      }
+      params.push(fromDate);
+      fromIdx = params.length;
+      params.push(toDate);
+      toIdx = params.length;
+      filters.push(
+        `((occ.occ_start + occ.occ_duration) AT TIME ZONE $${tzIdx})::date >= $${fromIdx}`
+      );
+      filters.push(`(occ.occ_start AT TIME ZONE $${tzIdx})::date <= $${toIdx}`);
     }
 
+    const source = ranged
+      ? `calendar_events e ${occurrenceJoin({
+          tzParam: `$${tzIdx}`,
+          fromDateParam: fromIdx ? `$${fromIdx}` : undefined,
+          toDateParam: toIdx ? `$${toIdx}` : undefined,
+        })}`
+      : "calendar_events e";
     const where = filters.join(" AND ");
     const count = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM calendar_events WHERE ${where}`,
+      `SELECT COUNT(*)::int AS total FROM ${source} WHERE ${where}`,
       params
     );
     params.push(limit, offset);
     const result = await pool.query(
-      `SELECT calendar_event_id, user_id, title, description, start_at, end_at,
-              is_all_day, repeat_type, repeat_interval, created_at, updated_at
-       FROM calendar_events
+      `SELECT e.calendar_event_id, e.user_id, e.title, e.description,
+              ${ranged ? "occ.occ_start AS start_at" : "e.start_at"},
+              ${ranged ? "(occ.occ_start + occ.occ_duration) AS end_at" : "e.end_at"},
+              e.is_all_day, e.repeat_type, e.repeat_interval, e.time_zone,
+              e.created_at, e.updated_at
+       FROM ${source}
        WHERE ${where}
-       ORDER BY start_at ASC
+       ORDER BY ${ranged ? "occ.occ_start" : "e.start_at"} ASC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -135,7 +185,8 @@ export const getCalendarEvent = async (req, res) => {
 
 export const createCalendarEvent = async (req, res) => {
   try {
-    const parsed = parseEventInput(req.body);
+    const tz = await requestTimeZone(req);
+    const parsed = await parseEventInput(req.body, { timeZone: tz });
     if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
     if (parsed.endAt && parsed.startAt && new Date(parsed.endAt) < new Date(parsed.startAt)) {
       return fail(res, 400, "End time must be after start time");
@@ -143,8 +194,8 @@ export const createCalendarEvent = async (req, res) => {
 
     const created = await pool.query(
       `INSERT INTO calendar_events (
-         user_id, title, description, start_at, end_at, is_all_day, repeat_type, repeat_interval
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         user_id, title, description, start_at, end_at, is_all_day, repeat_type, repeat_interval, time_zone
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING calendar_event_id`,
       [
         userId(req),
@@ -155,6 +206,7 @@ export const createCalendarEvent = async (req, res) => {
         parsed.isAllDay ?? false,
         parsed.repeatType,
         parsed.repeatInterval,
+        tz,
       ]
     );
     const event = await loadEvent(created.rows[0].calendar_event_id, userId(req));
@@ -172,7 +224,8 @@ export const updateCalendarEvent = async (req, res) => {
     const existing = await loadEvent(id, userId(req));
     if (!existing) return fail(res, 404, "Event not found", "EVENT_NOT_FOUND");
 
-    const parsed = parseEventInput(req.body, { partial: true });
+    const tz = await requestTimeZone(req);
+    const parsed = await parseEventInput(req.body, { partial: true, timeZone: tz });
     if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
     const startAt = parsed.startAt ?? existing.start_at;
@@ -184,8 +237,9 @@ export const updateCalendarEvent = async (req, res) => {
     await pool.query(
       `UPDATE calendar_events
        SET title = $1, description = $2, start_at = $3, end_at = $4,
-           is_all_day = $5, repeat_type = $6, repeat_interval = $7, updated_at = NOW()
-       WHERE calendar_event_id = $8 AND user_id = $9`,
+           is_all_day = $5, repeat_type = $6, repeat_interval = $7,
+           time_zone = $8, updated_at = NOW()
+       WHERE calendar_event_id = $9 AND user_id = $10`,
       [
         parsed.title || existing.title,
         parsed.description === undefined ? existing.description : parsed.description,
@@ -194,6 +248,7 @@ export const updateCalendarEvent = async (req, res) => {
         parsed.isAllDay === undefined ? existing.is_all_day : parsed.isAllDay,
         parsed.repeatType ?? existing.repeat_type,
         parsed.repeatInterval ?? existing.repeat_interval,
+        parsed.startAt ? tz : existing.time_zone,
         id,
         userId(req),
       ]

@@ -17,14 +17,16 @@ import {
   parsePagination,
   pick,
   toCamel,
+  formatDateOnly,
 } from "../utils/planner.js";
+import { localToday, requestTimeZone } from "../utils/time.js";
 
 const userId = (req) => req.user.user_id;
 
 const TASK_COLUMNS = `
-  t.task_id, t.user_id, t.category_id, t.title, t.description, t.status, t.priority,
-  t.due_date, t.due_time, t.repeat_type, t.repeat_interval, t.is_favorite,
-  t.is_archived, t.created_at, t.updated_at, t.completed_at,
+  t.task_id, t.user_id, t.task_category_id AS category_id, t.title, t.description,
+  t.status, t.priority, t.due_date, t.due_time, t.repeat_type, t.repeat_interval,
+  t.is_favorite, t.is_archived, t.created_at, t.updated_at, t.completed_at,
   c.name AS category_name
 `;
 
@@ -32,7 +34,7 @@ const loadTask = async (taskId, authUserId) => {
   const result = await pool.query(
     `SELECT ${TASK_COLUMNS}
      FROM tasks t
-     LEFT JOIN task_categories c ON c.task_category_id = t.category_id
+     LEFT JOIN task_categories c ON c.task_category_id = t.task_category_id
      WHERE t.task_id = $1 AND t.user_id = $2`,
     [taskId, authUserId]
   );
@@ -172,7 +174,7 @@ export const listTasks = async (req, res) => {
       const id = parseId(categoryId);
       if (!id) return fail(res, 400, "Invalid category id");
       params.push(id);
-      filters.push(`t.category_id = $${params.length}`);
+      filters.push(`t.task_category_id = $${params.length}`);
     }
 
     if (asBoolean(req.query.favorite ?? req.query.isFavorite, false)) {
@@ -197,15 +199,19 @@ export const listTasks = async (req, res) => {
       filters.push(`t.due_date <= $${params.length}`);
     }
 
+    const tz = await requestTimeZone(req);
     const scope = String(req.query.scope || req.query.due || "").toLowerCase();
     if (scope === "today") {
-      filters.push("t.due_date = CURRENT_DATE");
+      params.push(tz);
+      filters.push(`t.due_date = (NOW() AT TIME ZONE $${params.length})::date`);
       filters.push("t.status = 'pending'");
     } else if (scope === "upcoming") {
-      filters.push("t.due_date > CURRENT_DATE");
+      params.push(tz);
+      filters.push(`t.due_date > (NOW() AT TIME ZONE $${params.length})::date`);
       filters.push("t.status = 'pending'");
     } else if (scope === "overdue") {
-      filters.push("t.due_date < CURRENT_DATE");
+      params.push(tz);
+      filters.push(`t.due_date < (NOW() AT TIME ZONE $${params.length})::date`);
       filters.push("t.status = 'pending'");
     } else if (scope === "completed" || scope === "done") {
       filters.push("t.status = 'completed'");
@@ -223,7 +229,7 @@ export const listTasks = async (req, res) => {
     const result = await pool.query(
       `SELECT ${TASK_COLUMNS}
        FROM tasks t
-       LEFT JOIN task_categories c ON c.task_category_id = t.category_id
+       LEFT JOIN task_categories c ON c.task_category_id = t.task_category_id
        WHERE ${where}
        ORDER BY
          CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
@@ -325,7 +331,7 @@ export const createTask = async (req, res) => {
     await client.query("BEGIN");
     const created = await client.query(
       `INSERT INTO tasks (
-         user_id, category_id, title, description, priority, due_date, due_time,
+         user_id, task_category_id, title, description, priority, due_date, due_time,
          repeat_type, repeat_interval, is_favorite
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING task_id`,
@@ -403,7 +409,7 @@ export const updateTask = async (req, res) => {
     await pool.query(
       `UPDATE tasks
        SET title = $1, description = $2, priority = $3, due_date = $4, due_time = $5,
-           repeat_type = $6, repeat_interval = $7, category_id = $8, is_favorite = $9,
+           repeat_type = $6, repeat_interval = $7, task_category_id = $8, is_favorite = $9,
            updated_at = NOW()
        WHERE task_id = $10 AND user_id = $11`,
       [
@@ -462,10 +468,13 @@ export const completeTask = async (req, res) => {
         [id, userId(req)]
       );
     } else if (existing.repeat_type && existing.repeat_type !== "none") {
-      const baseDate = existing.due_date
-        ? String(existing.due_date).slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
-      const nextDue = nextDateOnly(baseDate, existing.repeat_type, existing.repeat_interval);
+      const tz = await requestTimeZone(req);
+      const today = await localToday(tz);
+      const baseDate = existing.due_date ? formatDateOnly(existing.due_date) : today;
+      let nextDue = nextDateOnly(baseDate, existing.repeat_type, existing.repeat_interval);
+      for (let i = 0; i < 400 && nextDue && nextDue < today; i += 1) {
+        nextDue = nextDateOnly(nextDue, existing.repeat_type, existing.repeat_interval);
+      }
       await pool.query(
         `UPDATE tasks
          SET status = 'pending', due_date = $1, completed_at = NULL, updated_at = NOW()

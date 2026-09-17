@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "OneVault",
+      "request": "launch",
+      "type": "dart",
+      "program": "one_vault/lib/main.dart",
+      "cwd": "one_vault"
+    }
+  ]
+}

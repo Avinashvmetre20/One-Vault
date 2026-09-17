@@ -1,16 +1,10 @@
-import 'dart:convert';
-
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../shared/enums/enums.dart';
 import '../../../shared/models/models.dart';
 import 'autofill_bridge.dart';
 import 'vault_api.dart';
-import 'vault_crypto.dart';
-import 'vault_models.dart';
 import 'vault_storage.dart';
 import 'vault_urls.dart';
 
@@ -44,24 +38,24 @@ class VaultService extends ChangeNotifier {
   final VaultLocalStore _store;
   final VaultApi _api;
   final LocalAuthentication _localAuth;
-  final _uuid = const Uuid();
 
-  SecretKey? _dek;
-  VaultSnapshot _snapshot = const VaultSnapshot();
   final Map<String, PasswordItem> _plain = {};
   DateTime? _backgroundedAt;
   VaultAutoLock autoLock = VaultAutoLock.oneMinute;
   bool biometricEnabled = false;
   bool unlocking = false;
+  bool _unlocked = false;
   bool _memoryUnlocked = false;
+  bool _hydrated = false;
+  bool _remoteSynced = false;
+  Future<void>? _syncing;
 
-  bool get isUnlocked => _dek != null || _memoryUnlocked;
-  bool get isSetup => memoryOnly || _snapshot.meta != null;
-  bool get hasBiometricKey => biometricEnabled && !memoryOnly;
+  bool get isUnlocked => memoryOnly ? _memoryUnlocked : _unlocked;
+  bool get isSetup => true;
 
   List<PasswordItem> get credentials {
     if (!isUnlocked) return const [];
-    final items = _plain.values.where((item) => item.deletedAt == null).toList()
+    final items = _plain.values.toList()
       ..sort((a, b) {
         if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
@@ -71,95 +65,44 @@ class VaultService extends ChangeNotifier {
 
   PasswordItem? byId(String id) {
     if (!isUnlocked) return null;
-    final item = _plain[id];
-    if (item == null || item.deletedAt != null) return null;
-    return item;
+    return _plain[id];
   }
 
   Future<void> bind() async {
-    if (memoryOnly) return;
+    if (memoryOnly || _hydrated) return;
     final userId = _userId();
     if (userId == null) return;
-    _snapshot = await _store.readSnapshot(userId);
-    if (_snapshot.meta == null) {
-      try {
-        final remote = await _api.meta();
-        if (remote != null) {
-          _snapshot = VaultSnapshot(
-            meta: remote,
-            credentials: _snapshot.credentials,
-          );
-          await _writeLocal();
-        }
-      } catch (_) {}
-    }
     autoLock = await _store.autoLock(userId);
     biometricEnabled = await _store.biometricEnabled(userId);
+    final cached = await _store.readPasswords(userId);
+    _replace(cached);
+    _unlocked = true;
+    _hydrated = true;
     _notify();
   }
 
   void unlockDemo(List<PasswordItem> items) {
     _memoryUnlocked = true;
-    _plain
-      ..clear()
-      ..addEntries(items.map((item) => MapEntry(item.id, item)));
+    _replace(items);
     _notify();
   }
 
   Future<void> setup(String masterPassword) async {
-    if (masterPassword.trim().length < 6) {
-      throw const VaultException('Vault password must be at least 6 characters');
-    }
-    final keys = await VaultCrypto.createKeys(masterPassword.trim());
-    _dek = keys.dek;
-    _snapshot = VaultSnapshot(
-      meta: VaultMeta(
-        salt: keys.salt,
-        wrappedDek: keys.wrappedDek,
-        wrappedDekNonce: keys.wrappedDekNonce,
-        kdfMemory: keys.kdfMemory,
-        kdfIterations: keys.kdfIterations,
-        kdfParallelism: keys.kdfParallelism,
-      ),
-      credentials: const [],
-    );
-    _plain.clear();
-    await _persistMeta();
-    await _persistDekIfAllowed();
-    await _importAutofillSaves();
-    await _syncAutofillCache();
-    _notify();
+    await unlock();
   }
 
   Future<void> unlockWithPassword(String masterPassword) async {
+    await unlock();
+  }
+
+  Future<void> unlock() async {
     unlocking = true;
     _notify();
     try {
-      await _ensureMeta();
-      final meta = _snapshot.meta;
-      if (meta == null) {
-        throw const VaultException('Vault is not set up yet');
-      }
-      _dek = await VaultCrypto.unwrapDek(
-        masterPassword: masterPassword.trim(),
-        saltB64: meta.salt,
-        wrappedDek: meta.wrappedDek,
-        wrappedDekNonce: meta.wrappedDekNonce,
-        memory: meta.kdfMemory,
-        iterations: meta.kdfIterations,
-        parallelism: meta.kdfParallelism,
-      );
-      await _decryptAll();
-      await _persistDekIfAllowed();
       await sync();
+      _unlocked = true;
       await _importAutofillSaves();
       await _syncAutofillCache();
-    } on VaultException {
-      rethrow;
-    } catch (_) {
-      _dek = null;
-      _plain.clear();
-      throw const VaultException('Could not unlock vault. Check your vault password.');
     } finally {
       unlocking = false;
       _notify();
@@ -176,15 +119,7 @@ class VaultService extends ChangeNotifier {
         options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
       );
       if (!ok) return false;
-      final bytes = await _store.readDek(userId);
-      if (bytes == null) return false;
-      _dek = SecretKey(bytes);
-      await _ensureMeta();
-      await _decryptAll();
-      await sync();
-      await _importAutofillSaves();
-      await _syncAutofillCache();
-      _notify();
+      await unlock();
       return true;
     } catch (_) {
       return false;
@@ -193,12 +128,13 @@ class VaultService extends ChangeNotifier {
 
   Future<void> lock({bool clearUser = false}) async {
     if (memoryOnly && !clearUser) return;
-    _dek = null;
-    _plain.clear();
-    _backgroundedAt = null;
+    _unlocked = false;
     _memoryUnlocked = false;
+    _backgroundedAt = null;
+    _plain.clear();
     if (clearUser) {
-      _snapshot = const VaultSnapshot();
+      _hydrated = false;
+      _remoteSynced = false;
       await AutofillBridge.clearCredentials();
     }
     _notify();
@@ -209,11 +145,6 @@ class VaultService extends ChangeNotifier {
     if (userId == null || memoryOnly) return;
     biometricEnabled = value;
     await _store.setBiometricEnabled(userId, value);
-    if (value) {
-      await _persistDekIfAllowed();
-    } else {
-      await _store.clearDek(userId);
-    }
     _notify();
   }
 
@@ -229,7 +160,7 @@ class VaultService extends ChangeNotifier {
   void onBackgrounded() {
     if (!isUnlocked || memoryOnly) return;
     if (autoLock == VaultAutoLock.immediately) {
-      _dek = null;
+      _unlocked = false;
       _plain.clear();
       _notify();
       return;
@@ -238,28 +169,37 @@ class VaultService extends ChangeNotifier {
   }
 
   void onResumed() {
-    if (memoryOnly || _backgroundedAt == null || _dek == null) return;
+    if (memoryOnly || _backgroundedAt == null || !_unlocked) return;
     final limit = autoLock.duration;
     if (limit == null) return;
     if (DateTime.now().difference(_backgroundedAt!) >= limit) {
-      _dek = null;
+      _unlocked = false;
       _plain.clear();
     }
     _backgroundedAt = null;
     _notify();
   }
 
-  String newId() => _uuid.v4();
-
   Future<void> upsert(PasswordItem item) async {
     _assertUnlocked();
-    final now = DateTime.now();
-    final stored = item.copyWith(
-      updatedAt: now,
-      version: _plain.containsKey(item.id) ? item.version + 1 : item.version,
-    );
-    _plain[stored.id] = stored;
-    await _persistCredential(stored);
+    if (memoryOnly) {
+      final saved = item.copyWith(
+        id: item.id.isEmpty ? 'pwd-${DateTime.now().microsecondsSinceEpoch}' : item.id,
+        updatedAt: DateTime.now(),
+      );
+      _plain[saved.id] = saved;
+      _notify();
+      return;
+    }
+    PasswordItem saved;
+    try {
+      saved = _isNew(item.id) ? await _api.create(item) : await _api.update(item);
+    } on VaultApiException catch (error) {
+      throw VaultException(error.message);
+    }
+    _plain.remove(item.id);
+    _plain[saved.id] = saved;
+    await _writeLocal();
     await _syncAutofillCache();
     _notify();
   }
@@ -273,150 +213,67 @@ class VaultService extends ChangeNotifier {
   Future<void> delete(String id) async {
     final item = byId(id);
     if (item == null) return;
-    final deleted = item.copyWith(
-      deletedAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      version: item.version + 1,
-    );
     _plain.remove(id);
-    await _persistCredential(deleted);
-    await _syncAutofillCache();
+    if (!memoryOnly) {
+      try {
+        await _api.delete(id);
+      } on VaultApiException catch (error) {
+        _plain[id] = item;
+        throw VaultException(error.message);
+      }
+      await _writeLocal();
+      await _syncAutofillCache();
+    }
     _notify();
+  }
+
+  Future<void> ensureRemoteSync() {
+    if (memoryOnly || _remoteSynced) return Future.value();
+    return sync();
   }
 
   Future<void> sync() async {
     if (memoryOnly || _token() == null || _token() == 'test-access-token') return;
+    final inFlight = _syncing;
+    if (inFlight != null) return inFlight;
+    final future = _syncRemote();
+    _syncing = future;
     try {
-      await _pushMeta();
-      final remote = await _api.credentials(includeDeleted: true);
-      final localById = {
-        for (final item in _snapshot.credentials) item.id: item,
-      };
-      var changed = false;
-      for (final remoteItem in remote) {
-        final local = localById[remoteItem.id];
-        if (local == null || remoteItem.version > local.version) {
-          localById[remoteItem.id] = remoteItem;
-          changed = true;
-        } else if (local.version > remoteItem.version) {
-          await _api.upsert(local);
-        }
-      }
-      for (final local in _snapshot.credentials) {
-        if (!remote.any((item) => item.id == local.id)) {
-          await _api.upsert(local);
-        }
-      }
-      if (changed) {
-        _snapshot = VaultSnapshot(
-          meta: _snapshot.meta,
-          credentials: localById.values.toList(),
-        );
-        await _writeLocal();
-        if (_dek != null) {
-          await _decryptAll();
-          await _syncAutofillCache();
-        }
-      }
+      await future;
+    } finally {
+      if (identical(_syncing, future)) _syncing = null;
+    }
+  }
+
+  Future<void> _syncRemote() async {
+    try {
+      final remote = await _api.list();
+      _replace(remote);
+      await _writeLocal();
+      _remoteSynced = true;
     } catch (_) {
-      // Offline access continues from the local encrypted cache.
-    }
-  }
-
-  Future<void> _ensureMeta() async {
-    if (_snapshot.meta != null) return;
-    try {
-      final remote = await _api.meta();
-      if (remote != null) {
-        _snapshot = VaultSnapshot(meta: remote, credentials: _snapshot.credentials);
-        await _writeLocal();
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _decryptAll() async {
-    final dek = _dek;
-    if (dek == null) return;
-    _plain.clear();
-    for (final encrypted in _snapshot.credentials) {
-      if (encrypted.deletedAt != null) continue;
-      try {
-        final payload = await VaultCrypto.decryptString(
-          VaultCiphertext(nonce: encrypted.nonce, payload: encrypted.encryptedPayload),
-          dek,
-        );
-        final item = PasswordItem.fromPayload(
-          jsonDecode(payload) as Map<String, dynamic>,
-        );
-        _plain[item.id] = item.copyWith(version: encrypted.version);
-      } catch (_) {
-        // Skip records that cannot be decrypted with this key.
+      if (_plain.isEmpty) {
+        final userId = _userId();
+        if (userId != null) {
+          _replace(await _store.readPasswords(userId));
+        }
       }
     }
-  }
-
-  Future<void> _persistCredential(PasswordItem item) async {
-    if (memoryOnly) return;
-    final dek = _dek;
-    if (dek == null) return;
-    final cipher = await VaultCrypto.encryptString(
-      jsonEncode(item.toPayload()),
-      dek,
-    );
-    final encrypted = EncryptedCredential(
-      id: item.id,
-      nonce: cipher.nonce,
-      encryptedPayload: cipher.payload,
-      version: item.version,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      deletedAt: item.deletedAt,
-    );
-    final next = [
-      ..._snapshot.credentials.where((entry) => entry.id != item.id),
-      encrypted,
-    ];
-    _snapshot = VaultSnapshot(meta: _snapshot.meta, credentials: next);
-    await _writeLocal();
-    try {
-      await _api.upsert(encrypted);
-    } catch (_) {}
-  }
-
-  Future<void> _persistMeta() async {
-    await _writeLocal();
-    await _pushMeta();
-  }
-
-  Future<void> _pushMeta() async {
-    final meta = _snapshot.meta;
-    if (meta == null || memoryOnly) return;
-    try {
-      await _api.putMeta(meta);
-    } catch (_) {}
   }
 
   Future<void> _writeLocal() async {
     final userId = _userId();
     if (userId == null || memoryOnly) return;
-    await _store.writeSnapshot(userId, _snapshot);
-  }
-
-  Future<void> _persistDekIfAllowed() async {
-    final userId = _userId();
-    final dek = _dek;
-    if (userId == null || dek == null || memoryOnly || !biometricEnabled) return;
-    await _store.saveDek(userId, await dek.extractBytes());
+    await _store.writePasswords(userId, _plain.values.toList());
   }
 
   Future<void> _importAutofillSaves() async {
     if (memoryOnly || !isUnlocked) return;
     final pending = await AutofillBridge.pendingSaves();
     for (final raw in pending) {
-      final id = raw['id'] ?? '';
       final username = raw['username'] ?? '';
       final password = raw['password'] ?? '';
-      if (id.isEmpty || password.isEmpty) continue;
+      if (password.isEmpty) continue;
       final domain = (raw['domain'] ?? '').toLowerCase();
       final website = (raw['website'] ?? '').isNotEmpty
           ? raw['website']!
@@ -425,8 +282,8 @@ class VaultService extends ChangeNotifier {
           ? raw['title']!
           : (domain.isEmpty ? 'Login' : domain);
 
-      PasswordItem? existing = byId(id);
-      if (existing == null && username.isNotEmpty && domain.isNotEmpty) {
+      PasswordItem? existing;
+      if (username.isNotEmpty && domain.isNotEmpty) {
         for (final item in credentials) {
           if (item.username.toLowerCase() == username.toLowerCase() &&
               (item.domain == domain || item.website.toLowerCase().contains(domain))) {
@@ -448,7 +305,7 @@ class VaultService extends ChangeNotifier {
       } else {
         await upsert(
           PasswordItem(
-            id: id,
+            id: '',
             title: title,
             username: username,
             password: password,
@@ -468,6 +325,14 @@ class VaultService extends ChangeNotifier {
     if (memoryOnly || !isUnlocked) return;
     await AutofillBridge.syncCredentials(credentials);
   }
+
+  void _replace(Iterable<PasswordItem> items) {
+    _plain
+      ..clear()
+      ..addEntries(items.map((item) => MapEntry(item.id, item)));
+  }
+
+  bool _isNew(String id) => id.isEmpty || int.tryParse(id) == null;
 
   void _assertUnlocked() {
     if (!isUnlocked) {

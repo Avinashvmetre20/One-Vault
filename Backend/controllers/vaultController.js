@@ -1,249 +1,282 @@
 import { pool } from "../config/db.js";
-import { fail, ok, pick, toCamel } from "../utils/planner.js";
+import { asBoolean, clampText, fail, ok, parseId, pick, toCamel } from "../utils/planner.js";
 
 const userId = (req) => req.user.user_id;
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PASSWORD_CATEGORIES = new Set([
+  "banking",
+  "email",
+  "socialMedia",
+  "shopping",
+  "work",
+  "development",
+  "servers",
+  "wifi",
+  "entertainment",
+  "other",
+]);
 
-const parseUuid = (value) => {
-  const id = String(value || "").trim();
-  return UUID_RE.test(id) ? id : null;
+const PASSWORD_COLUMNS = `
+  password_id, user_id, title, username, password, website, category, notes, tags,
+  is_favorite, recovery_email, recovery_phone, two_factor_method, backup_codes,
+  security_notes, domain, created_at, updated_at
+`;
+
+const asTags = (value) => {
+  if (value == null) return [];
+  if (!Array.isArray(value)) return null;
+  const tags = [
+    ...new Set(
+      value
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+        .map((item) => item.slice(0, 40))
+    ),
+  ];
+  return tags.slice(0, 20);
 };
 
-const asPositiveInt = (value, fallback) => {
-  if (value == null || value === "") return fallback;
-  const n = Number.parseInt(value, 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
+const parsePasswordInput = (body, { partial = false } = {}) => {
+  const titleRaw = pick(body, "title");
+  const title =
+    titleRaw === undefined && partial
+      ? { value: undefined }
+      : clampText(titleRaw, { required: !partial, max: 200 });
+  if (title.error) return { error: title.error };
+
+  const usernameRaw = pick(body, "username");
+  const username =
+    usernameRaw === undefined && partial
+      ? { value: undefined }
+      : clampText(usernameRaw, { max: 255 });
+  if (username.error) return { error: username.error };
+
+  const passwordRaw = pick(body, "password");
+  const password =
+    passwordRaw === undefined && partial
+      ? { value: undefined }
+      : clampText(passwordRaw, { required: !partial, max: 2000 });
+  if (password.error) return { error: password.error };
+
+  const websiteRaw = pick(body, "website");
+  const website =
+    websiteRaw === undefined && partial
+      ? { value: undefined }
+      : clampText(websiteRaw, { max: 500 });
+  if (website.error) return { error: website.error };
+
+  const notesRaw = pick(body, "notes");
+  const notes =
+    notesRaw === undefined && partial
+      ? { value: undefined }
+      : clampText(notesRaw, { max: 5000 });
+  if (notes.error) return { error: notes.error };
+
+  const categoryValue = pick(body, "category");
+  let category;
+  if (categoryValue === undefined) category = undefined;
+  else {
+    category = String(categoryValue || "other");
+    if (!PASSWORD_CATEGORIES.has(category)) return { error: "Invalid category" };
+  }
+
+  const tagsValue = pick(body, "tags");
+  let tags;
+  if (tagsValue === undefined) tags = undefined;
+  else {
+    tags = asTags(tagsValue);
+    if (!tags) return { error: "Invalid tags" };
+  }
+
+  const domainRaw = pick(body, "domain");
+  const domain =
+    domainRaw === undefined && partial
+      ? { value: undefined }
+      : clampText(domainRaw, { max: 255 });
+  if (domain.error) return { error: domain.error };
+
+  return {
+    title: title.value,
+    username: username.value,
+    password: password.value,
+    website: website.value,
+    category: partial ? category : category || "other",
+    notes: notes.value,
+    tags,
+    isFavorite:
+      pick(body, "isFavorite", "is_favorite") === undefined
+        ? undefined
+        : asBoolean(pick(body, "isFavorite", "is_favorite"), false),
+    recoveryEmail: pick(body, "recoveryEmail", "recovery_email"),
+    recoveryPhone: pick(body, "recoveryPhone", "recovery_phone"),
+    twoFactorMethod: pick(body, "twoFactorMethod", "two_factor_method"),
+    backupCodes: pick(body, "backupCodes", "backup_codes"),
+    securityNotes: pick(body, "securityNotes", "security_notes"),
+    domain: domain.value,
+  };
 };
 
-const requireCiphertext = (value, label) => {
-  const text = String(value || "").trim();
-  if (!text) return { error: `${label} is required` };
-  if (text.length > 200000) return { error: `${label} is too large` };
-  return { value: text };
+const loadPassword = async (passwordId, authUserId) => {
+  const result = await pool.query(
+    `SELECT ${PASSWORD_COLUMNS}
+     FROM passwords
+     WHERE password_id = $1 AND user_id = $2`,
+    [passwordId, authUserId]
+  );
+  return result.rows[0] || null;
 };
 
-export const getVaultMeta = async (req, res) => {
+export const listPasswords = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT user_id, kdf, kdf_memory, kdf_iterations, kdf_parallelism,
-              salt, wrapped_dek, wrapped_dek_nonce, created_at, updated_at
-       FROM vault_meta
-       WHERE user_id = $1`,
+      `SELECT ${PASSWORD_COLUMNS}
+       FROM passwords
+       WHERE user_id = $1
+       ORDER BY is_favorite DESC, updated_at DESC`,
       [userId(req)]
     );
-    if (!result.rowCount) {
-      return ok(res, { meta: null });
-    }
-    return ok(res, { meta: toCamel(result.rows[0]) });
+    return ok(res, { passwords: result.rows.map(toCamel) });
   } catch (error) {
-    console.error("Get vault meta error:", error);
-    return fail(res, 500, "Could not load vault");
+    console.error("List passwords error:", error);
+    return fail(res, 500, "Could not load passwords");
   }
 };
 
-export const putVaultMeta = async (req, res) => {
+export const getPassword = async (req, res) => {
   try {
-    const salt = requireCiphertext(pick(req.body, "salt"), "Salt");
-    if (salt.error) return fail(res, 400, salt.error, "VALIDATION_ERROR");
-    const wrappedDek = requireCiphertext(
-      pick(req.body, "wrappedDek", "wrapped_dek"),
-      "Wrapped key"
-    );
-    if (wrappedDek.error) return fail(res, 400, wrappedDek.error, "VALIDATION_ERROR");
-    const wrappedNonce = requireCiphertext(
-      pick(req.body, "wrappedDekNonce", "wrapped_dek_nonce"),
-      "Wrapped key nonce"
-    );
-    if (wrappedNonce.error) {
-      return fail(res, 400, wrappedNonce.error, "VALIDATION_ERROR");
-    }
+    const id = parseId(req.params.id);
+    if (!id) return fail(res, 400, "Invalid password id");
+    const row = await loadPassword(id, userId(req));
+    if (!row) return fail(res, 404, "Password not found", "PASSWORD_NOT_FOUND");
+    return ok(res, { password: toCamel(row) });
+  } catch (error) {
+    console.error("Get password error:", error);
+    return fail(res, 500, "Could not load password");
+  }
+};
 
-    const kdf = String(pick(req.body, "kdf") || "argon2id");
-    if (kdf !== "argon2id") return fail(res, 400, "Unsupported KDF", "VALIDATION_ERROR");
-
-    const memory = asPositiveInt(pick(req.body, "kdfMemory", "kdf_memory"), 8192);
-    const iterations = asPositiveInt(
-      pick(req.body, "kdfIterations", "kdf_iterations"),
-      3
-    );
-    const parallelism = asPositiveInt(
-      pick(req.body, "kdfParallelism", "kdf_parallelism"),
-      1
-    );
-    if (!memory || !iterations || !parallelism) {
-      return fail(res, 400, "Invalid KDF parameters", "VALIDATION_ERROR");
-    }
-
-    const existing = await pool.query(
-      `SELECT user_id FROM vault_meta WHERE user_id = $1`,
-      [userId(req)]
-    );
-
-    if (existing.rowCount) {
-      const updated = await pool.query(
-        `UPDATE vault_meta
-         SET kdf = $2,
-             kdf_memory = $3,
-             kdf_iterations = $4,
-             kdf_parallelism = $5,
-             salt = $6,
-             wrapped_dek = $7,
-             wrapped_dek_nonce = $8,
-             updated_at = NOW()
-         WHERE user_id = $1
-         RETURNING user_id, kdf, kdf_memory, kdf_iterations, kdf_parallelism,
-                   salt, wrapped_dek, wrapped_dek_nonce, created_at, updated_at`,
-        [
-          userId(req),
-          kdf,
-          memory,
-          iterations,
-          parallelism,
-          salt.value,
-          wrappedDek.value,
-          wrappedNonce.value,
-        ]
-      );
-      return ok(res, { meta: toCamel(updated.rows[0]) }, { message: "Vault updated" });
-    }
+export const createPassword = async (req, res) => {
+  try {
+    const parsed = parsePasswordInput(req.body);
+    if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
     const created = await pool.query(
-      `INSERT INTO vault_meta (
-         user_id, kdf, kdf_memory, kdf_iterations, kdf_parallelism,
-         salt, wrapped_dek, wrapped_dek_nonce
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING user_id, kdf, kdf_memory, kdf_iterations, kdf_parallelism,
-                 salt, wrapped_dek, wrapped_dek_nonce, created_at, updated_at`,
+      `INSERT INTO passwords (
+         user_id, title, username, password, website, category, notes, tags,
+         is_favorite, recovery_email, recovery_phone, two_factor_method,
+         backup_codes, security_notes, domain
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       RETURNING ${PASSWORD_COLUMNS}`,
       [
         userId(req),
-        kdf,
-        memory,
-        iterations,
-        parallelism,
-        salt.value,
-        wrappedDek.value,
-        wrappedNonce.value,
+        parsed.title,
+        parsed.username || "",
+        parsed.password || "",
+        parsed.website || "",
+        parsed.category,
+        parsed.notes || "",
+        parsed.tags || [],
+        parsed.isFavorite ?? false,
+        String(parsed.recoveryEmail || "").trim(),
+        String(parsed.recoveryPhone || "").trim(),
+        String(parsed.twoFactorMethod || "").trim(),
+        String(parsed.backupCodes || "").trim(),
+        String(parsed.securityNotes || "").trim(),
+        parsed.domain || "",
       ]
     );
     return ok(
       res,
-      { meta: toCamel(created.rows[0]) },
-      { status: 201, message: "Vault created" }
+      { password: toCamel(created.rows[0]) },
+      { status: 201, message: "Password saved" }
     );
   } catch (error) {
-    console.error("Put vault meta error:", error);
-    return fail(res, 500, "Could not save vault");
+    console.error("Create password error:", error);
+    return fail(res, 500, "Could not save password");
   }
 };
 
-export const listVaultCredentials = async (req, res) => {
+export const updatePassword = async (req, res) => {
   try {
-    const includeDeleted =
-      String(req.query.includeDeleted || req.query.include_deleted || "")
-        .toLowerCase() === "true";
-    const result = await pool.query(
-      `SELECT credential_id, user_id, encrypted_payload, nonce, version,
-              created_at, updated_at, deleted_at
-       FROM vault_credentials
-       WHERE user_id = $1
-         ${includeDeleted ? "" : "AND deleted_at IS NULL"}
-       ORDER BY updated_at DESC`,
-      [userId(req)]
-    );
-    return ok(res, { credentials: result.rows.map(toCamel) });
-  } catch (error) {
-    console.error("List vault credentials error:", error);
-    return fail(res, 500, "Could not load credentials");
-  }
-};
+    const id = parseId(req.params.id);
+    if (!id) return fail(res, 400, "Invalid password id");
+    const existing = await loadPassword(id, userId(req));
+    if (!existing) return fail(res, 404, "Password not found", "PASSWORD_NOT_FOUND");
 
-export const upsertVaultCredential = async (req, res) => {
-  try {
-    const id = parseUuid(req.params.id);
-    if (!id) return fail(res, 400, "Invalid credential id");
+    const parsed = parsePasswordInput(req.body, { partial: true });
+    if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
-    const payload = requireCiphertext(
-      pick(req.body, "encryptedPayload", "encrypted_payload"),
-      "Encrypted payload"
-    );
-    if (payload.error) return fail(res, 400, payload.error, "VALIDATION_ERROR");
-    const nonce = requireCiphertext(pick(req.body, "nonce"), "Nonce");
-    if (nonce.error) return fail(res, 400, nonce.error, "VALIDATION_ERROR");
-
-    const version = asPositiveInt(pick(req.body, "version"), 1);
-    if (!version) return fail(res, 400, "Invalid version", "VALIDATION_ERROR");
-
-    const deletedRaw = pick(req.body, "deletedAt", "deleted_at");
-    const deletedAt = deletedRaw ? new Date(deletedRaw) : null;
-    if (deletedRaw && Number.isNaN(deletedAt?.getTime())) {
-      return fail(res, 400, "Invalid deletedAt", "VALIDATION_ERROR");
-    }
-
-    const existing = await pool.query(
-      `SELECT version FROM vault_credentials
-       WHERE credential_id = $1 AND user_id = $2`,
-      [id, userId(req)]
-    );
-
-    if (existing.rowCount && existing.rows[0].version > version) {
-      return fail(
-        res,
-        409,
-        "A newer version of this credential already exists",
-        "VERSION_CONFLICT"
-      );
-    }
-
-    const saved = await pool.query(
-      `INSERT INTO vault_credentials (
-         credential_id, user_id, encrypted_payload, nonce, version, deleted_at
-       ) VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (credential_id) DO UPDATE
-         SET encrypted_payload = EXCLUDED.encrypted_payload,
-             nonce = EXCLUDED.nonce,
-             version = EXCLUDED.version,
-             deleted_at = EXCLUDED.deleted_at,
-             updated_at = NOW()
-         WHERE vault_credentials.user_id = $2
-           AND vault_credentials.version <= EXCLUDED.version
-       RETURNING credential_id, user_id, encrypted_payload, nonce, version,
-                 created_at, updated_at, deleted_at`,
-      [id, userId(req), payload.value, nonce.value, version, deletedAt]
-    );
-
-    if (!saved.rowCount) {
-      return fail(res, 409, "Credential could not be saved", "VERSION_CONFLICT");
-    }
-
-    return ok(res, { credential: toCamel(saved.rows[0]) });
-  } catch (error) {
-    console.error("Upsert vault credential error:", error);
-    return fail(res, 500, "Could not save credential");
-  }
-};
-
-export const deleteVaultCredential = async (req, res) => {
-  try {
-    const id = parseUuid(req.params.id);
-    if (!id) return fail(res, 400, "Invalid credential id");
-
-    const deleted = await pool.query(
-      `UPDATE vault_credentials
-       SET deleted_at = NOW(),
-           version = version + 1,
+    const updated = await pool.query(
+      `UPDATE passwords
+       SET title = $1,
+           username = $2,
+           password = $3,
+           website = $4,
+           category = $5,
+           notes = $6,
+           tags = $7,
+           is_favorite = $8,
+           recovery_email = $9,
+           recovery_phone = $10,
+           two_factor_method = $11,
+           backup_codes = $12,
+           security_notes = $13,
+           domain = $14,
            updated_at = NOW()
-       WHERE credential_id = $1 AND user_id = $2 AND deleted_at IS NULL
-       RETURNING credential_id, version, deleted_at`,
+       WHERE password_id = $15 AND user_id = $16
+       RETURNING ${PASSWORD_COLUMNS}`,
+      [
+        parsed.title || existing.title,
+        parsed.username === undefined ? existing.username : parsed.username,
+        parsed.password === undefined ? existing.password : parsed.password,
+        parsed.website === undefined ? existing.website : parsed.website,
+        parsed.category || existing.category,
+        parsed.notes === undefined ? existing.notes : parsed.notes,
+        parsed.tags === undefined ? existing.tags : parsed.tags,
+        parsed.isFavorite === undefined ? existing.is_favorite : parsed.isFavorite,
+        parsed.recoveryEmail === undefined
+          ? existing.recovery_email
+          : String(parsed.recoveryEmail || "").trim(),
+        parsed.recoveryPhone === undefined
+          ? existing.recovery_phone
+          : String(parsed.recoveryPhone || "").trim(),
+        parsed.twoFactorMethod === undefined
+          ? existing.two_factor_method
+          : String(parsed.twoFactorMethod || "").trim(),
+        parsed.backupCodes === undefined
+          ? existing.backup_codes
+          : String(parsed.backupCodes || "").trim(),
+        parsed.securityNotes === undefined
+          ? existing.security_notes
+          : String(parsed.securityNotes || "").trim(),
+        parsed.domain === undefined ? existing.domain : parsed.domain,
+        id,
+        userId(req),
+      ]
+    );
+    return ok(res, { password: toCamel(updated.rows[0]) }, { message: "Password updated" });
+  } catch (error) {
+    console.error("Update password error:", error);
+    return fail(res, 500, "Could not update password");
+  }
+};
+
+export const deletePassword = async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return fail(res, 400, "Invalid password id");
+    const deleted = await pool.query(
+      `DELETE FROM passwords
+       WHERE password_id = $1 AND user_id = $2
+       RETURNING password_id`,
       [id, userId(req)]
     );
     if (!deleted.rowCount) {
-      return fail(res, 404, "Credential not found", "CREDENTIAL_NOT_FOUND");
+      return fail(res, 404, "Password not found", "PASSWORD_NOT_FOUND");
     }
-    return ok(res, { deleted: true, credential: toCamel(deleted.rows[0]) });
+    return ok(res, { deleted: true }, { message: "Password deleted" });
   } catch (error) {
-    console.error("Delete vault credential error:", error);
-    return fail(res, 500, "Could not delete credential");
+    console.error("Delete password error:", error);
+    return fail(res, 500, "Could not delete password");
   }
 };

@@ -19,6 +19,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
+  bool _noticeShown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_noticeShown) return;
+    final notice = AppScope.of(context).takeAuthNotice();
+    if (notice == null) return;
+    _noticeShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) showAppSnack(context, notice);
+    });
+  }
 
   @override
   void dispose() {

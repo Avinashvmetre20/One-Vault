@@ -2,6 +2,8 @@ abstract final class AppRoutes {
   static const splash = '/splash';
   static const login = '/login';
   static const register = '/register';
+  static const mpinSetup = '/mpin/setup';
+  static const mpinUnlock = '/mpin/unlock';
   static const home = '/';
   static const search = '/search';
 

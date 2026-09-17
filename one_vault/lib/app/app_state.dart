@@ -1,12 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 
+import '../core/network/api_client.dart';
 import '../features/authentication/data/auth_models.dart';
 import '../features/authentication/data/auth_service.dart';
 import '../features/authentication/data/auth_storage.dart';
+import '../features/authentication/data/mpin_storage.dart';
+import '../features/passwords/data/vault_api.dart';
 import '../features/passwords/data/vault_service.dart';
 import '../features/planner/data/planner_service.dart';
+import '../features/settings/data/theme_storage.dart';
 import '../shared/enums/enums.dart';
 import '../shared/models/models.dart';
 
@@ -16,13 +21,22 @@ class AppState extends ChangeNotifier {
     this.demoVault = false,
     AuthService? authService,
     AuthStorage? authStorage,
+    MpinStorage? mpinStorage,
   }) : _injectedAuthService = authService,
-       _injectedAuthStorage = authStorage {
+       _injectedAuthStorage = authStorage,
+       _mpinStorage = mpinStorage ?? MpinStorage() {
+    _apiClient = ApiClient(refreshAccessToken: _refreshAccessToken);
     vault = VaultService(
       token: () => accessToken,
       userId: () => sessionUser?.userId,
       memoryOnly: demoVault,
       onChanged: notifyListeners,
+      api: VaultApi(token: () => accessToken, apiClient: _apiClient),
+    );
+    planner = PlannerService(
+      token: () => accessToken,
+      onChanged: notifyPlannerChanged,
+      apiClient: _apiClient,
     );
     _seed();
     if (demoVault) {
@@ -43,6 +57,8 @@ class AppState extends ChangeNotifier {
       email: state.profile.email,
       phone: state.profile.phone,
     );
+    state.hasMpin = true;
+    state.mpinUnlocked = true;
     return state;
   }
 
@@ -50,13 +66,19 @@ class AppState extends ChangeNotifier {
   final bool demoVault;
   final AuthService? _injectedAuthService;
   final AuthStorage? _injectedAuthStorage;
+  final MpinStorage _mpinStorage;
+  final LocalAuthentication _localAuth = LocalAuthentication();
   AuthService? _authServiceInstance;
   AuthStorage? _authStorageInstance;
+  final ThemeStorage _themeStorage = ThemeStorage();
 
   AuthService get _authService =>
-      _authServiceInstance ??= _injectedAuthService ?? AuthService();
+      _authServiceInstance ??=
+          _injectedAuthService ?? AuthService(apiClient: _apiClient);
   AuthStorage get _authStorage =>
       _authStorageInstance ??= _injectedAuthStorage ?? AuthStorage();
+  late final ApiClient _apiClient;
+  Completer<bool>? _refreshLock;
 
   int _nextId = 100;
   bool isReady = false;
@@ -66,6 +88,13 @@ class AppState extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
   SecuritySettings security = SecuritySettings();
   late PersonalInfo profile;
+  bool hasMpin = false;
+  bool mpinUnlocked = false;
+  int mpinAttemptsLeft = MpinStorage.maxAttempts;
+  bool biometricUnlockEnabled = false;
+  bool biometricAvailable = false;
+  bool _biometricPromptOpen = false;
+  String? authNotice;
 
   late final VaultService vault;
 
@@ -74,6 +103,10 @@ class AppState extends ChangeNotifier {
       accessToken!.isNotEmpty &&
       sessionUser != null;
 
+  bool get needsMpinSetup => isLoggedIn && !hasMpin;
+  bool get needsMpinUnlock => isLoggedIn && hasMpin && !mpinUnlocked;
+  bool get isAppUnlocked => isLoggedIn && mpinUnlocked;
+
   List<PasswordItem> get passwords => vault.credentials;
   final List<DocumentItem> documents = [];
   final List<PhotoItem> photos = [];
@@ -81,10 +114,7 @@ class AppState extends ChangeNotifier {
   final List<AccountItem> accounts = [];
   final List<TransactionItem> transactions = [];
 
-  late final PlannerService planner = PlannerService(
-    token: () => accessToken,
-    onChanged: notifyPlannerChanged,
-  );
+  late final PlannerService planner;
 
   final ValueNotifier<int> plannerTick = ValueNotifier<int>(0);
   final ValueNotifier<int> shellTabIndex = ValueNotifier<int>(0);
@@ -123,6 +153,7 @@ class AppState extends ChangeNotifier {
   void setThemeMode(ThemeMode mode) {
     themeMode = mode;
     notifyListeners();
+    unawaited(_themeStorage.write(mode));
   }
 
   void updateSecurity(SecuritySettings value) {
@@ -131,40 +162,26 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> restoreSession() async {
+    final themeFuture = _themeStorage.read();
+    SavedSession? saved;
     try {
-      final saved = await _authStorage.read();
-      if (saved != null) {
-        accessToken = saved.tokens.accessToken;
-        refreshToken = saved.tokens.refreshToken;
-        if (saved.user != null) {
-          _applyUser(saved.user!);
-        }
-      }
+      saved = await _authStorage.read();
     } catch (_) {
       await clearSession(notify: false);
     }
+    themeMode = await themeFuture;
 
-    if (sessionUser != null) {
-      await vault.bind();
+    if (saved != null) {
+      accessToken = saved.tokens.accessToken;
+      refreshToken = saved.tokens.refreshToken;
+      if (saved.user != null) {
+        _applyUser(saved.user!);
+      }
     }
 
+    await _loadMpinState(unlockIfPresent: false);
     isReady = true;
     notifyListeners();
-
-    if (accessToken != null && accessToken!.isNotEmpty) {
-      unawaited(_refreshSessionInBackground());
-    }
-  }
-
-  Future<void> _refreshSessionInBackground() async {
-    try {
-      await _loadCurrentUser();
-      notifyListeners();
-    } on AuthException catch (error) {
-      if (error.statusCode == 401) {
-        await clearSession();
-      }
-    } catch (_) {}
   }
 
   Future<void> login({
@@ -201,10 +218,18 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> clearSession({bool notify = true}) async {
+    final userId = sessionUser?.userId;
     accessToken = null;
     refreshToken = null;
     sessionUser = null;
+    hasMpin = false;
+    mpinUnlocked = false;
+    mpinAttemptsLeft = MpinStorage.maxAttempts;
+    biometricUnlockEnabled = false;
     shellTabIndex.value = 0;
+    if (userId != null) {
+      await _mpinStorage.clear(userId);
+    }
     await _authStorage.clear();
     await vault.lock(clearUser: true);
     if (notify) notifyListeners();
@@ -215,29 +240,225 @@ class AppState extends ChangeNotifier {
     refreshToken = result.tokens.refreshToken;
     _applyUser(result.user);
     await _authStorage.save(result.tokens, user: result.user);
-    await vault.bind();
+    await _loadMpinState(unlockIfPresent: true);
+    await _bindVaultIfUnlocked();
     notifyListeners();
   }
 
-  Future<void> _loadCurrentUser() async {
-    try {
-      final user = await _authService.me(accessToken!);
-      _applyUser(user);
-      await _authStorage.save(
-        AuthTokens(accessToken: accessToken!, refreshToken: refreshToken!),
-        user: user,
-      );
+  Future<void> _bindVaultIfUnlocked() async {
+    if (!isAppUnlocked || demoVault) return;
+    await vault.bind();
+  }
+
+  String? takeAuthNotice() {
+    final notice = authNotice;
+    authNotice = null;
+    return notice;
+  }
+
+  Future<void> _loadMpinState({required bool unlockIfPresent}) async {
+    final userId = sessionUser?.userId;
+    if (userId == null) {
+      hasMpin = false;
+      mpinUnlocked = false;
+      mpinAttemptsLeft = MpinStorage.maxAttempts;
+      biometricUnlockEnabled = false;
       return;
-    } on AuthException catch (error) {
-      if (error.statusCode != 401 || refreshToken == null) rethrow;
     }
 
-    final tokens = await _authService.refresh(refreshToken!);
-    accessToken = tokens.accessToken;
-    refreshToken = tokens.refreshToken;
-    final user = await _authService.me(accessToken!);
-    _applyUser(user);
-    await _authStorage.save(tokens, user: user);
+    final mpin = await Future.wait([
+      _mpinStorage.hasPin(userId),
+      _mpinStorage.biometricEnabled(userId),
+      _mpinStorage.attempts(userId),
+    ]);
+    hasMpin = mpin[0] as bool;
+    biometricUnlockEnabled = mpin[1] as bool;
+    final used = mpin[2] as int;
+    mpinAttemptsLeft = (MpinStorage.maxAttempts - used).clamp(0, MpinStorage.maxAttempts);
+    if (hasMpin && unlockIfPresent) {
+      mpinUnlocked = true;
+      mpinAttemptsLeft = MpinStorage.maxAttempts;
+      await _mpinStorage.resetAttempts(userId);
+    } else {
+      mpinUnlocked = false;
+    }
+  }
+
+  Future<void> setupMpin(String pin, {bool enableBiometric = false}) async {
+    final userId = sessionUser?.userId;
+    if (userId == null) {
+      throw const MpinException('Sign in first');
+    }
+    if (!_mpinStorage.isValidPin(pin)) {
+      throw const MpinException('MPIN must be 4 digits');
+    }
+    await _mpinStorage.save(userId, pin);
+    if (enableBiometric) {
+      await _mpinStorage.setBiometricEnabled(userId, true);
+      biometricUnlockEnabled = true;
+    } else {
+      biometricUnlockEnabled = await _mpinStorage.biometricEnabled(userId);
+    }
+    hasMpin = true;
+    mpinUnlocked = true;
+    mpinAttemptsLeft = MpinStorage.maxAttempts;
+    await _bindVaultIfUnlocked();
+    notifyListeners();
+  }
+
+  Future<bool> unlockMpin(String pin) async {
+    final userId = sessionUser?.userId;
+    if (userId == null) return false;
+    if (!_mpinStorage.isValidPin(pin)) return false;
+
+    final ok = await _mpinStorage.verify(userId, pin);
+    if (ok) {
+      mpinUnlocked = true;
+      mpinAttemptsLeft = MpinStorage.maxAttempts;
+      await _mpinStorage.resetAttempts(userId);
+      await _bindVaultIfUnlocked();
+      notifyListeners();
+      return true;
+    }
+
+    final used = await _mpinStorage.incrementAttempts(userId);
+    mpinAttemptsLeft = (MpinStorage.maxAttempts - used).clamp(0, MpinStorage.maxAttempts);
+    if (used >= MpinStorage.maxAttempts) {
+      authNotice = 'Too many incorrect MPIN attempts. Sign in with email and password.';
+      await _mpinStorage.resetAttempts(userId);
+      await logout();
+      return false;
+    }
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> canUseAppBiometric() async {
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final supported = await _localAuth.isDeviceSupported();
+      return canCheck || supported;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _refreshBiometricAvailable() async {
+    biometricAvailable = await canUseAppBiometric();
+  }
+
+  Future<void> refreshBiometricAvailable() async {
+    await _refreshBiometricAvailable();
+    notifyListeners();
+  }
+
+  Future<bool> promptAppBiometric(String reason) async {
+    _biometricPromptOpen = true;
+    try {
+      return await _localAuth.authenticate(
+        localizedReason: reason,
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          stickyAuth: true,
+        ),
+      );
+    } catch (_) {
+      return false;
+    } finally {
+      _biometricPromptOpen = false;
+    }
+  }
+
+  Future<bool> unlockWithBiometric() async {
+    if (!hasMpin || !biometricUnlockEnabled) return false;
+    final ok = await promptAppBiometric('Unlock OneVault');
+    if (!ok) return false;
+    mpinUnlocked = true;
+    mpinAttemptsLeft = MpinStorage.maxAttempts;
+    final userId = sessionUser?.userId;
+    if (userId != null) await _mpinStorage.resetAttempts(userId);
+    await _bindVaultIfUnlocked();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> setAppBiometricEnabled(bool value, {bool verify = true}) async {
+    final userId = sessionUser?.userId;
+    if (userId == null) {
+      throw const MpinException('Sign in first');
+    }
+    if (value && verify) {
+      if (!await canUseAppBiometric()) {
+        throw const MpinException(
+          'Turn on fingerprint in phone settings first',
+        );
+      }
+      final ok = await promptAppBiometric(
+        'Confirm your fingerprint to enable app unlock',
+      );
+      if (!ok) {
+        throw const MpinException('Fingerprint not verified');
+      }
+    }
+    await _mpinStorage.setBiometricEnabled(userId, value);
+    biometricUnlockEnabled = value;
+    notifyListeners();
+  }
+
+  Future<void> changeMpin({
+    required String currentPin,
+    required String nextPin,
+  }) async {
+    final userId = sessionUser?.userId;
+    if (userId == null) {
+      throw const MpinException('Sign in first');
+    }
+    if (!_mpinStorage.isValidPin(nextPin)) {
+      throw const MpinException('MPIN must be 4 digits');
+    }
+    final ok = await _mpinStorage.verify(userId, currentPin);
+    if (!ok) {
+      throw const MpinException('Current MPIN is incorrect');
+    }
+    await _mpinStorage.save(userId, nextPin);
+    hasMpin = true;
+    mpinUnlocked = true;
+    mpinAttemptsLeft = MpinStorage.maxAttempts;
+    notifyListeners();
+  }
+
+  void lockMpin() {
+    if (!restoreOnStart || demoVault || _biometricPromptOpen) return;
+    if (!isLoggedIn || !hasMpin || !mpinUnlocked) return;
+    mpinUnlocked = false;
+    notifyListeners();
+  }
+
+  Future<bool> _refreshAccessToken() async {
+    if (demoVault) return false;
+    final pending = _refreshLock;
+    if (pending != null) return pending.future;
+
+    final token = refreshToken;
+    if (token == null || token.isEmpty || token == 'test-refresh-token') {
+      return false;
+    }
+
+    final lock = Completer<bool>();
+    _refreshLock = lock;
+    try {
+      final tokens = await _authService.refresh(token);
+      accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
+      await _authStorage.save(tokens, user: sessionUser);
+      lock.complete(true);
+      return true;
+    } catch (_) {
+      lock.complete(false);
+      return false;
+    } finally {
+      _refreshLock = null;
+    }
   }
 
   void _applyUser(AuthUser user) {

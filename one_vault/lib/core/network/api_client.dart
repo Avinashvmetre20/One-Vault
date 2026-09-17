@@ -1,18 +1,53 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_config.dart';
+import 'device_time_zone.dart';
 
 class ApiClient {
-  ApiClient({http.Client? client}) : _client = client ?? http.Client();
+  ApiClient({
+    http.Client? client,
+    this.refreshAccessToken,
+  }) : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const _timeout = Duration(seconds: 15);
+  final Future<bool> Function()? refreshAccessToken;
+  static const _timeout = Duration(seconds: 25);
+
+  static Map<String, String> authHeaders(String? token, {bool json = false}) {
+    return {
+      'Authorization': 'Bearer ${token ?? ''}',
+      'X-Timezone': DeviceTimeZone.current,
+      if (json) 'Content-Type': 'application/json',
+    };
+  }
+
+  static Map<String, dynamic> decode(http.Response response) {
+    if (response.body.isEmpty) return <String, dynamic>{};
+    final decoded = jsonDecode(response.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  static Future<Map<String, dynamic>> readJson(
+    Future<http.Response> Function() request, {
+    required Exception Function(String message, int statusCode) onError,
+  }) async {
+    final response = await request();
+    final json = decode(response);
+    if (response.statusCode >= 200 && response.statusCode < 300) return json;
+    throw onError(
+      (json['message'] as String?) ?? 'Request failed',
+      response.statusCode,
+    );
+  }
 
   Uri _uri(String path, [Map<String, String>? query]) {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final base = ApiConfig.baseUrl.replaceAll(RegExp(r'/+$'), '');
+    final normalized = path.startsWith('/') ? path : '/$path';
+    final uri = Uri.parse('$base$normalized');
     if (query == null || query.isEmpty) return uri;
     return uri.replace(
       queryParameters: {
@@ -30,7 +65,7 @@ class ApiClient {
     return _send(
       method: 'GET',
       path: path,
-      request: () => _client.get(_uri(path, query), headers: headers),
+      request: () => _client.get(_uri(path, query), headers: _withTimeZone(headers)),
     );
   }
 
@@ -42,7 +77,7 @@ class ApiClient {
     return _send(
       method: 'POST',
       path: path,
-      request: () => _client.post(_uri(path), headers: headers, body: body),
+      request: () => _client.post(_uri(path), headers: _withTimeZone(headers), body: body),
     );
   }
 
@@ -54,7 +89,7 @@ class ApiClient {
     return _send(
       method: 'PATCH',
       path: path,
-      request: () => _client.patch(_uri(path), headers: headers, body: body),
+      request: () => _client.patch(_uri(path), headers: _withTimeZone(headers), body: body),
     );
   }
 
@@ -66,7 +101,7 @@ class ApiClient {
     return _send(
       method: 'PUT',
       path: path,
-      request: () => _client.put(_uri(path), headers: headers, body: body),
+      request: () => _client.put(_uri(path), headers: _withTimeZone(headers), body: body),
     );
   }
 
@@ -78,8 +113,15 @@ class ApiClient {
     return _send(
       method: 'DELETE',
       path: path,
-      request: () => _client.delete(_uri(path), headers: headers, body: body),
+      request: () => _client.delete(_uri(path), headers: _withTimeZone(headers), body: body),
     );
+  }
+
+  Map<String, String> _withTimeZone(Map<String, String>? headers) {
+    return {
+      'X-Timezone': DeviceTimeZone.current,
+      ...?headers,
+    };
   }
 
   Future<http.Response> _send({
@@ -88,17 +130,33 @@ class ApiClient {
     required Future<http.Response> Function() request,
   }) async {
     final startedAt = DateTime.now();
-    final url = '${ApiConfig.baseUrl}$path';
+    final url = _uri(path).toString();
     try {
-      final response = await request().timeout(_timeout);
-      final ms = DateTime.now().difference(startedAt).inMilliseconds;
-      final line = '$method $url ${response.statusCode} ${ms}ms';
-      debugPrint(response.statusCode >= 400 ? 'ERROR $line' : line);
+      var response = await request().timeout(_timeout);
+      if (response.statusCode == 401 &&
+          !path.startsWith('/api/auth/') &&
+          refreshAccessToken != null) {
+        final refreshed = await refreshAccessToken!();
+        if (refreshed) {
+          response = await request().timeout(_timeout);
+        }
+      }
+      _log(
+        '$method $url ${response.statusCode} ${DateTime.now().difference(startedAt).inMilliseconds}ms',
+        isError: response.statusCode >= 400,
+      );
       return response;
     } catch (error) {
-      final ms = DateTime.now().difference(startedAt).inMilliseconds;
-      debugPrint('ERROR $method $url ${ms}ms $error');
+      _log(
+        '$method $url ${DateTime.now().difference(startedAt).inMilliseconds}ms $error',
+        isError: true,
+      );
       rethrow;
     }
+  }
+
+  void _log(String line, {required bool isError}) {
+    if (!kDebugMode) return;
+    debugPrint(isError ? 'ERROR $line' : line);
   }
 }

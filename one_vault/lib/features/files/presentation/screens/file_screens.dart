@@ -3,8 +3,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
+import '../../../../app/theme/app_dimensions.dart';
+import '../../../../core/widgets/app_fields.dart';
+import '../../../../core/widgets/app_page.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
+import '../../../../core/widgets/info_row.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
@@ -17,37 +21,32 @@ class FileListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final files = AppScope.of(context).files;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Files')),
-      floatingActionButton: ShellFab(
+    return AppPage(
+      title: 'Files',
+      fab: ShellFab(
         heroTag: 'fab-files',
         tooltip: 'Add file',
         onPressed: () => context.push(AppRoutes.fileNew),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
-        children: [
-          if (files.isEmpty)
-            const EmptyState(
-              icon: Icons.folder_outlined,
-              title: 'No files',
-              subtitle: 'Create a file record to see it here.',
-            )
-          else
-            ...files.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: ListTileCard(
-                  icon: Icons.insert_drive_file_outlined,
-                  title: item.name,
-                  subtitle:
-                      '${item.folder} · ${item.fileType} · ${item.sizeLabel} · ${Formatters.date(item.createdAt)}',
-                  onTap: () => context.push(AppRoutes.fileDetail(item.id)),
-                ),
-              ),
+      children: [
+        if (files.isEmpty)
+          const EmptyState(
+            icon: Icons.folder_outlined,
+            title: 'No files',
+            subtitle: 'Create a file record to see it here.',
+          )
+        else
+          ...files.map(
+            (item) => ListTileCard(
+              icon: Icons.insert_drive_file_outlined,
+              title: item.name,
+              subtitle:
+                  '${item.folder} · ${item.fileType} · ${item.sizeLabel} · ${Formatters.date(item.createdAt)}',
+              onTap: () => context.push(AppRoutes.fileDetail(item.id)),
+              margin: AppDimensions.itemSpacing,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -61,34 +60,26 @@ class FileDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = AppScope.of(context).files.where((entry) => entry.id == id).firstOrNull;
     if (item == null) {
-      return const Scaffold(
-        body: EmptyState(
-          icon: Icons.folder_outlined,
-          title: 'Not found',
-          subtitle: 'This file is not in the vault.',
-        ),
+      return const AppMissingPage(
+        icon: Icons.folder_outlined,
+        title: 'Not found',
+        subtitle: 'This file is not in the vault.',
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: Text(item.name)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          Text('Folder: ${item.folder}'),
-          const SizedBox(height: 8),
-          Text('Type: ${item.fileType}'),
-          const SizedBox(height: 8),
-          Text('Size: ${item.sizeLabel}'),
-          const SizedBox(height: 8),
-          Text('Created: ${Formatters.date(item.createdAt)}'),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: () => showAppSnack(context, 'File preview will be added later'),
-            child: const Text('Preview'),
-          ),
-        ],
-      ),
+    return AppDetailPage(
+      title: item.name,
+      children: [
+        InfoRow(label: 'Folder', value: item.folder),
+        InfoRow(label: 'Type', value: item.fileType),
+        InfoRow(label: 'Size', value: item.sizeLabel),
+        InfoRow(label: 'Created', value: Formatters.date(item.createdAt)),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: () => showAppSnack(context, 'File preview will be added later'),
+          child: const Text('Preview'),
+        ),
+      ],
     );
   }
 }
@@ -136,19 +127,13 @@ class _FileFormScreenState extends State<FileFormScreen> {
         context.pop();
       },
       children: [
-        TextField(
-          controller: _name,
-          decoration: const InputDecoration(labelText: 'File name'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _folder,
-          decoration: const InputDecoration(labelText: 'Folder'),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: _type,
-          decoration: const InputDecoration(labelText: 'Type'),
+        AppTextField(controller: _name, label: 'File name'),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _folder, label: 'Folder'),
+        AppDimensions.fieldGap,
+        AppDropdown<String>(
+          label: 'Type',
+          value: _type,
           items: const ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'TXT', 'JPG', 'PNG', 'ZIP', 'CSV']
               .map((item) => DropdownMenuItem(value: item, child: Text(item)))
               .toList(),

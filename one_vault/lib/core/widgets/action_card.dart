@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
+import 'app_icon_badge.dart';
 
 class ActionCard extends StatelessWidget {
   const ActionCard({
@@ -29,21 +30,13 @@ class ActionCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: AppColors.line(context)),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppColors.iconWash,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-                ),
-                child: Icon(icon, color: AppColors.primary, size: 22),
-              ),
+              AppIconBadge(icon: icon, size: 42, iconSize: 22),
               const SizedBox(height: 10),
               Text(
                 title,
@@ -59,7 +52,7 @@ class ActionCard extends StatelessWidget {
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 12, color: AppColors.muted(context)),
               ),
             ],
           ),

@@ -51,31 +51,44 @@ class AppShell extends StatelessWidget {
       });
     }
 
+    final keyboardOpen = media.viewInsets.bottom > 0;
+    final depth = GoRouterState.of(context)
+        .uri
+        .path
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .length;
+    final hideTabs = depth >= 3;
+
     return Scaffold(
       extendBody: true,
+      resizeToAvoidBottomInset: false,
       body: MediaQuery(
         data: media.copyWith(
           padding: media.padding.copyWith(
-            bottom: media.padding.bottom + barClearance,
+            bottom: media.padding.bottom +
+                (keyboardOpen || hideTabs ? 0 : barClearance),
           ),
         ),
         child: navigationShell,
       ),
-      bottomNavigationBar: Material(
-        color: Colors.transparent,
-        elevation: 0,
-        child: FloatingTabBar(
-          currentIndex: navigationShell.currentIndex,
-          items: _tabs,
-          onTap: (index) {
-            shellIndex.value = index;
-            navigationShell.goBranch(
-              index,
-              initialLocation: index == navigationShell.currentIndex,
-            );
-          },
-        ),
-      ),
+      bottomNavigationBar: hideTabs
+          ? null
+          : Material(
+              color: Colors.transparent,
+              elevation: 0,
+              child: FloatingTabBar(
+                currentIndex: navigationShell.currentIndex,
+                items: _tabs,
+                onTap: (index) {
+                  shellIndex.value = index;
+                  navigationShell.goBranch(
+                    index,
+                    initialLocation: index == navigationShell.currentIndex,
+                  );
+                },
+              ),
+            ),
     );
   }
 }

@@ -20,18 +20,29 @@ int? asIntOrNull(dynamic value) {
 
 DateTime? asDateTime(dynamic value) {
   if (value == null) return null;
-  if (value is DateTime) return value;
-  return DateTime.tryParse(value.toString());
+  if (value is DateTime) return value.toUtc();
+  return DateTime.tryParse(value.toString())?.toUtc();
+}
+
+DateTime? asCivilDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) {
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(value.toString());
+  if (match == null) return null;
+  return DateTime(
+    int.parse(match.group(1)!),
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  );
 }
 
 String? asDateOnly(dynamic value) {
-  final date = asDateTime(value);
-  if (date == null && value is String && value.length >= 10) {
-    return value.substring(0, 10);
-  }
-  if (date == null) return null;
-  final local = date.isUtc ? date.toLocal() : date;
-  return '${local.year.toString().padLeft(4, '0')}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+  final civil = asCivilDate(value);
+  if (civil == null) return null;
+  return '${civil.year.toString().padLeft(4, '0')}-${civil.month.toString().padLeft(2, '0')}-${civil.day.toString().padLeft(2, '0')}';
 }
 
 String? asTimeOnly(dynamic value) {
@@ -264,9 +275,9 @@ class PlannerTask {
       description: json['description'] as String? ?? '',
       status: taskStatusFrom(json['status']),
       priority: taskPriorityFrom(json['priority']),
-      categoryId: asIntOrNull(json['categoryId']),
+      categoryId: asIntOrNull(json['categoryId'] ?? json['taskCategoryId']),
       categoryName: json['categoryName'] as String?,
-      dueDate: asDateTime(json['dueDate']),
+      dueDate: asCivilDate(json['dueDate']),
       dueTime: asTimeOnly(json['dueTime']),
       repeatType: repeatTypeFrom(json['repeatType']),
       repeatInterval: asInt(json['repeatInterval'] ?? 1),
@@ -314,7 +325,7 @@ class PlannerNote {
       id: asInt(json['noteId'] ?? json['id']),
       title: json['title'] as String? ?? '',
       content: json['content'] as String? ?? '',
-      categoryId: asIntOrNull(json['categoryId']),
+      categoryId: asIntOrNull(json['categoryId'] ?? json['noteCategoryId']),
       categoryName: json['categoryName'] as String?,
       tags: rawTags is List ? rawTags.map((item) => item.toString()).toList() : const [],
       isPinned: json['isPinned'] == true,
@@ -339,6 +350,7 @@ class PlannerReminder {
     this.kind = ReminderKind.reminder,
     this.snoozedUntil,
     this.notificationId,
+    this.timeZone,
   });
 
   final int id;
@@ -353,6 +365,7 @@ class PlannerReminder {
   final ReminderKind kind;
   final DateTime? snoozedUntil;
   final String? notificationId;
+  final String? timeZone;
 
   DateTime get when => snoozedUntil ?? reminderAt;
   bool get isCompleted => status == ReminderStatus.completed;
@@ -363,7 +376,7 @@ class PlannerReminder {
       id: asInt(json['reminderId'] ?? json['id']),
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      reminderAt: asDateTime(json['reminderAt']) ?? DateTime.now(),
+      reminderAt: asDateTime(json['reminderAt']) ?? DateTime.now().toUtc(),
       taskId: asIntOrNull(json['taskId']),
       taskTitle: json['taskTitle'] as String?,
       repeatType: repeatTypeFrom(json['repeatType']),
@@ -372,6 +385,7 @@ class PlannerReminder {
       kind: reminderKindFrom(json['kind']),
       snoozedUntil: asDateTime(json['snoozedUntil']),
       notificationId: json['notificationId']?.toString(),
+      timeZone: json['timeZone'] as String?,
     );
   }
 }
@@ -386,6 +400,7 @@ class CalendarEvent {
     this.isAllDay = false,
     this.repeatType = RepeatType.none,
     this.repeatInterval = 1,
+    this.timeZone,
   });
 
   final int id;
@@ -396,17 +411,19 @@ class CalendarEvent {
   final bool isAllDay;
   final RepeatType repeatType;
   final int repeatInterval;
+  final String? timeZone;
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) {
     return CalendarEvent(
       id: asInt(json['calendarEventId'] ?? json['id']),
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      startAt: asDateTime(json['startAt']) ?? DateTime.now(),
+      startAt: asDateTime(json['startAt']) ?? DateTime.now().toUtc(),
       endAt: asDateTime(json['endAt']),
       isAllDay: json['isAllDay'] == true,
       repeatType: repeatTypeFrom(json['repeatType']),
       repeatInterval: asInt(json['repeatInterval'] ?? 1),
+      timeZone: json['timeZone'] as String?,
     );
   }
 }

@@ -133,7 +133,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: AppColors.scaffold,
+        backgroundColor: AppColors.canvas(context),
         body: SafeArea(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -163,7 +163,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
                         width: 96,
                         height: 96,
                         decoration: BoxDecoration(
-                          color: AppColors.iconWash,
+                          color: AppColors.wash(context),
                           borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
                         ),
                         child: Icon(
@@ -191,14 +191,14 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
                       const SizedBox(height: 8),
                       Text(
                         Formatters.date(item.when),
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                        style: TextStyle(color: AppColors.muted(context), fontSize: 16),
                       ),
                       if (item.description.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Text(
                           item.description,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+                          style: TextStyle(color: AppColors.muted(context), height: 1.4),
                         ),
                       ],
                       if (item.taskTitle != null && item.taskTitle!.isNotEmpty) ...[

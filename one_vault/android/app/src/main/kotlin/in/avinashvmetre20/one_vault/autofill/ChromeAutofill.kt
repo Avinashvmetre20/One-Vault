@@ -1,4 +1,4 @@
-package com.example.one_vault.autofill
+package `in`.avinashvmetre20.one_vault.autofill
 
 import android.content.ContentResolver
 import android.content.Context

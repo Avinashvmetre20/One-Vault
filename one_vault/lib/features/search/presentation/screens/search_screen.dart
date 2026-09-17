@@ -5,6 +5,8 @@ import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
 import '../../../../shared/models/models.dart';
@@ -66,7 +68,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Search')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: AppDimensions.pagePadding,
         children: [
           AppSearchField(
             hintText: 'Try HDFC, Amazon, insurance...',
@@ -79,13 +81,13 @@ class _SearchScreenState extends State<SearchScreen> {
           if (q.isEmpty)
             Text(
               'Type to look through passwords, documents, tasks, notes, reminders, and transactions.',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: AppColors.muted(context)),
             )
           else if (passwordHits.isEmpty &&
               documentHits.isEmpty &&
               txnHits.isEmpty &&
               _plannerHits.isEmpty)
-            Text('No matches for "$q".', style: TextStyle(color: Colors.grey.shade600))
+            Text('No matches for "$q".', style: TextStyle(color: AppColors.muted(context)))
           else ...[
             for (final item in _plannerHits) ...[
               ListTileCard(

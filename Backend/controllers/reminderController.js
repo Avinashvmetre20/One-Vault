@@ -1,20 +1,19 @@
 import { pool } from "../config/db.js";
 import {
   asBoolean,
-  asDateTime,
   asInterval,
   asReminderKind,
   asReminderStatus,
   asRepeatType,
   clampText,
   fail,
-  nextOccurrence,
   ok,
   parseId,
   parsePagination,
   pick,
   toCamel,
 } from "../utils/planner.js";
+import { nextInstant, parseInstant, parseRangeBound, requestTimeZone } from "../utils/time.js";
 
 const userId = (req) => req.user.user_id;
 
@@ -22,7 +21,7 @@ const loadReminder = async (reminderId, authUserId) => {
   const result = await pool.query(
     `SELECT r.reminder_id, r.user_id, r.task_id, r.title, r.description, r.reminder_at,
             r.repeat_type, r.repeat_interval, r.status, r.snoozed_until, r.notification_id,
-            r.kind, r.created_at, r.updated_at, r.completed_at, t.title AS task_title
+            r.kind, r.time_zone, r.created_at, r.updated_at, r.completed_at, t.title AS task_title
      FROM reminders r
      LEFT JOIN tasks t ON t.task_id = r.task_id
      WHERE r.reminder_id = $1 AND r.user_id = $2`,
@@ -40,7 +39,7 @@ const ownedTask = async (taskId, authUserId) => {
   return result.rowCount > 0;
 };
 
-const parseReminderInput = async (body, authUserId, { partial = false } = {}) => {
+const parseReminderInput = async (body, authUserId, { partial = false, timeZone } = {}) => {
   const titleRaw = pick(body, "title");
   const title = titleRaw === undefined && partial
     ? { value: undefined }
@@ -53,7 +52,7 @@ const parseReminderInput = async (body, authUserId, { partial = false } = {}) =>
   if (description.error) return { error: description.error };
 
   const atValue = pick(body, "reminderAt", "reminder_at", "dateTime");
-  const reminderAt = atValue === undefined ? undefined : asDateTime(atValue);
+  const reminderAt = atValue === undefined ? undefined : await parseInstant(atValue, timeZone);
   if (!partial && !reminderAt) return { error: "Reminder date and time are required" };
   if (atValue !== undefined && reminderAt === undefined) return { error: "Invalid reminder date" };
 
@@ -108,7 +107,10 @@ export const listReminders = async (req, res) => {
       filters.push("r.status = 'pending'");
     } else if (scope === "today") {
       filters.push("r.status = 'pending'");
-      filters.push("((r.snoozed_until AT TIME ZONE 'UTC')::date = CURRENT_DATE OR (r.reminder_at AT TIME ZONE 'UTC')::date = CURRENT_DATE)");
+      params.push(await requestTimeZone(req));
+      filters.push(
+        `(COALESCE(r.snoozed_until, r.reminder_at) AT TIME ZONE $${params.length})::date = (NOW() AT TIME ZONE $${params.length})::date`
+      );
     } else if (scope === "completed") {
       filters.push("r.status = 'completed'");
     } else if (scope === "cancelled") {
@@ -136,8 +138,9 @@ export const listReminders = async (req, res) => {
       filters.push(`r.kind = $${params.length}`);
     }
 
-    const from = req.query.from ? asDateTime(req.query.from) : null;
-    const to = req.query.to ? asDateTime(req.query.to) : null;
+    const tz = await requestTimeZone(req);
+    const from = req.query.from ? await parseRangeBound(req.query.from, tz) : null;
+    const to = req.query.to ? await parseRangeBound(req.query.to, tz, { endOfDay: true }) : null;
     if (req.query.from && from === undefined) return fail(res, 400, "Invalid from date");
     if (req.query.to && to === undefined) return fail(res, 400, "Invalid to date");
     if (from) {
@@ -158,7 +161,7 @@ export const listReminders = async (req, res) => {
     const result = await pool.query(
       `SELECT r.reminder_id, r.user_id, r.task_id, r.title, r.description, r.reminder_at,
               r.repeat_type, r.repeat_interval, r.status, r.snoozed_until, r.notification_id,
-              r.kind, r.created_at, r.updated_at, r.completed_at, t.title AS task_title
+              r.kind, r.time_zone, r.created_at, r.updated_at, r.completed_at, t.title AS task_title
        FROM reminders r
        LEFT JOIN tasks t ON t.task_id = r.task_id
        WHERE ${where}
@@ -192,13 +195,14 @@ export const getReminder = async (req, res) => {
 
 export const createReminder = async (req, res) => {
   try {
-    const parsed = await parseReminderInput(req.body, userId(req));
+    const tz = await requestTimeZone(req);
+    const parsed = await parseReminderInput(req.body, userId(req), { timeZone: tz });
     if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
     const created = await pool.query(
       `INSERT INTO reminders (
-         user_id, task_id, title, description, reminder_at, repeat_type, repeat_interval, kind, notification_id
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         user_id, task_id, title, description, reminder_at, repeat_type, repeat_interval, kind, notification_id, time_zone
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING reminder_id`,
       [
         userId(req),
@@ -210,6 +214,7 @@ export const createReminder = async (req, res) => {
         parsed.repeatInterval,
         parsed.kind ?? "reminder",
         parsed.notificationId ?? null,
+        tz,
       ]
     );
     const reminder = await loadReminder(created.rows[0].reminder_id, userId(req));
@@ -227,14 +232,19 @@ export const updateReminder = async (req, res) => {
     const existing = await loadReminder(id, userId(req));
     if (!existing) return fail(res, 404, "Reminder not found", "REMINDER_NOT_FOUND");
 
-    const parsed = await parseReminderInput(req.body, userId(req), { partial: true });
+    const tz = await requestTimeZone(req);
+    const parsed = await parseReminderInput(req.body, userId(req), {
+      partial: true,
+      timeZone: tz,
+    });
     if (parsed.error) return fail(res, 400, parsed.error, "VALIDATION_ERROR");
 
     await pool.query(
       `UPDATE reminders
        SET title = $1, description = $2, reminder_at = $3, repeat_type = $4,
-           repeat_interval = $5, task_id = $6, kind = $7, notification_id = $8, updated_at = NOW()
-       WHERE reminder_id = $9 AND user_id = $10`,
+           repeat_interval = $5, task_id = $6, kind = $7, notification_id = $8,
+           time_zone = $9, updated_at = NOW()
+       WHERE reminder_id = $10 AND user_id = $11`,
       [
         parsed.title || existing.title,
         parsed.description === undefined ? existing.description : parsed.description,
@@ -244,6 +254,7 @@ export const updateReminder = async (req, res) => {
         parsed.taskId === undefined ? existing.task_id : parsed.taskId,
         parsed.kind ?? existing.kind ?? "reminder",
         parsed.notificationId === undefined ? existing.notification_id : parsed.notificationId,
+        parsed.reminderAt ? tz : existing.time_zone,
         id,
         userId(req),
       ]
@@ -288,14 +299,29 @@ export const completeReminder = async (req, res) => {
         [id, userId(req)]
       );
     } else if (existing.repeat_type && existing.repeat_type !== "none") {
-      const nextAt = nextOccurrence(existing.reminder_at, existing.repeat_type, existing.repeat_interval);
-      await pool.query(
-        `UPDATE reminders
-         SET status = 'pending', reminder_at = $1, snoozed_until = NULL,
-             completed_at = NULL, updated_at = NOW()
-         WHERE reminder_id = $2 AND user_id = $3`,
-        [nextAt, id, userId(req)]
+      const nextAt = await nextInstant(
+        existing.reminder_at,
+        existing.repeat_type,
+        existing.repeat_interval,
+        existing.time_zone || (await requestTimeZone(req)),
+        { after: new Date().toISOString() }
       );
+      if (!nextAt) {
+        await pool.query(
+          `UPDATE reminders
+           SET status = 'completed', completed_at = NOW(), snoozed_until = NULL, updated_at = NOW()
+           WHERE reminder_id = $1 AND user_id = $2`,
+          [id, userId(req)]
+        );
+      } else {
+        await pool.query(
+          `UPDATE reminders
+           SET status = 'pending', reminder_at = $1, snoozed_until = NULL,
+               completed_at = NULL, updated_at = NOW()
+           WHERE reminder_id = $2 AND user_id = $3`,
+          [nextAt, id, userId(req)]
+        );
+      }
     } else {
       await pool.query(
         `UPDATE reminders
@@ -322,12 +348,13 @@ export const snoozeReminder = async (req, res) => {
 
     const untilValue = pick(req.body, "snoozedUntil", "snoozed_until", "until");
     const minutes = Number.parseInt(pick(req.body, "minutes"), 10);
-    let until = untilValue ? asDateTime(untilValue) : undefined;
+    let until = untilValue ? await parseInstant(untilValue, await requestTimeZone(req)) : undefined;
     if (untilValue && until === undefined) return fail(res, 400, "Invalid snooze time");
     if (!until) {
       const add = Number.isInteger(minutes) && minutes > 0 ? minutes : 10;
       until = new Date(Date.now() + add * 60 * 1000).toISOString();
     }
+    if (new Date(until) <= new Date()) return fail(res, 400, "Snooze time must be in the future");
 
     await pool.query(
       `UPDATE reminders

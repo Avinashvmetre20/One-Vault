@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../features/passwords/data/autofill_bridge.dart';
 import '../../../../features/passwords/data/vault_storage.dart';
 import '../../../../shared/helpers/snack.dart';
+import '../../data/mpin_storage.dart';
 
 class SecurityScreen extends StatelessWidget {
   const SecurityScreen({super.key});
@@ -18,18 +20,29 @@ class SecurityScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Security')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 32),
+        padding: AppDimensions.pagePaddingForm,
         children: [
+          ListTile(
+            title: const Text('Change MPIN'),
+            subtitle: const Text('4-digit lock stored only on this phone'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.pinSetup),
+          ),
           SwitchListTile(
-            title: const Text('App PIN'),
-            subtitle: Text(security.pinEnabled ? 'PIN is on' : 'PIN is off'),
-            value: security.pinEnabled,
-            onChanged: (value) {
-              if (value) {
-                context.push(AppRoutes.pinSetup);
-              } else {
-                state.updateSecurity(security.copyWith(pinEnabled: false, pin: ''));
-                showAppSnack(context, 'PIN disabled');
+            title: const Text('Unlock with fingerprint'),
+            subtitle: const Text('Use fingerprint instead of MPIN'),
+            value: state.biometricUnlockEnabled,
+            onChanged: (value) async {
+              try {
+                await state.setAppBiometricEnabled(value);
+                if (!context.mounted) return;
+                showAppSnack(
+                  context,
+                  value ? 'Fingerprint unlock enabled' : 'Fingerprint unlock disabled',
+                );
+              } on MpinException catch (error) {
+                if (!context.mounted) return;
+                showAppSnack(context, error.message);
               }
             },
           ),
@@ -139,7 +152,7 @@ class _AutofillSetupScreenState extends State<AutofillSetupScreen> with WidgetsB
     return Scaffold(
       appBar: AppBar(title: const Text('Autofill setup')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        padding: AppDimensions.pagePaddingForm,
         children: [
           Text(
             'Chrome still shows Google Password Manager until BOTH steps are done.',
@@ -225,68 +238,6 @@ class _StepCard extends StatelessWidget {
             FilledButton(onPressed: onPressed, child: Text(actionLabel)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class PinSetupScreen extends StatefulWidget {
-  const PinSetupScreen({super.key});
-
-  @override
-  State<PinSetupScreen> createState() => _PinSetupScreenState();
-}
-
-class _PinSetupScreenState extends State<PinSetupScreen> {
-  final _pin = TextEditingController();
-  final _confirm = TextEditingController();
-
-  @override
-  void dispose() {
-    _pin.dispose();
-    _confirm.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Set PIN')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: [
-          TextField(
-            controller: _pin,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-            decoration: const InputDecoration(labelText: '4-6 digit PIN'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _confirm,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-            decoration: const InputDecoration(labelText: 'Confirm PIN'),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: () {
-              if (_pin.text.length < 4 || _pin.text != _confirm.text) {
-                showAppSnack(context, 'PINs must match and be at least 4 digits');
-                return;
-              }
-              final state = AppScope.of(context);
-              state.updateSecurity(
-                state.security.copyWith(pinEnabled: true, pin: _pin.text),
-              );
-              showAppSnack(context, 'PIN saved');
-              context.pop();
-            },
-            child: const Text('Save PIN'),
-          ),
-        ],
       ),
     );
   }

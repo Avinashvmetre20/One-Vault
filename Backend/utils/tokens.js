@@ -79,7 +79,7 @@ export const issueTokenPair = async (user) => {
 
 export const revokeRefreshToken = async (token) => {
   const result = await pool.query(
-    `DELETE FROM refresh_tokens WHERE token = $1 RETURNING id`,
+    `DELETE FROM refresh_tokens WHERE token = $1 RETURNING refresh_token_id`,
     [token]
   );
   return result.rowCount > 0;

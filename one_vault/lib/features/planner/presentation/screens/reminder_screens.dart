@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/app_fields.dart';
@@ -11,6 +12,7 @@ import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../../shared/helpers/confirm.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../data/planner_models.dart';
 import '../../data/planner_service.dart';
@@ -128,7 +130,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> with PlannerTic
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 160),
+          padding: AppDimensions.pagePaddingTallFab,
           children: [
             AppSearchField(
               hintText: 'Search reminders',
@@ -306,7 +308,7 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
               subtitle: 'This reminder is gone.',
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              padding: AppDimensions.pagePadding,
               children: [
                 Text(Formatters.dateTime(item.when)),
                 const SizedBox(height: 8),
@@ -336,10 +338,17 @@ class _ReminderDetailScreenState extends State<ReminderDetailScreen> {
                 ),
                 TextButton(
                   onPressed: () async {
+                    final kind = item.isAlarm ? 'alarm' : 'reminder';
+                    final confirmed = await showAppConfirm(
+                      context,
+                      title: 'Delete this $kind?',
+                      message: '${item.title} will be removed. This cannot be undone.',
+                    );
+                    if (!confirmed || !mounted) return;
                     await ReminderNotifications.instance.cancel(item.id);
                     await _api.deleteReminder(item.id);
                     if (!mounted) return;
-                    showAppSnack(context, 'Reminder deleted');
+                    showAppSnack(context, item.isAlarm ? 'Alarm deleted' : 'Reminder deleted');
                     context.pop();
                   },
                   child: const Text('Delete', style: TextStyle(color: AppColors.danger)),
@@ -390,7 +399,7 @@ class _ReminderFormScreenState extends State<ReminderFormScreen> {
           _title.text = existing.title;
           _description.text = existing.description;
           _repeat = existing.repeatType;
-          _when = existing.reminderAt;
+          _when = existing.reminderAt.toLocal();
           _taskId = existing.taskId;
           _quickMinutes = null;
         }
@@ -508,7 +517,7 @@ class _ReminderFormScreenState extends State<ReminderFormScreen> {
           onTap: _pickWhen,
         ),
         const SizedBox(height: 12),
-        Text('Remind me in', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+        Text('Remind me in', style: TextStyle(color: AppColors.muted(context), fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,

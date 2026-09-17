@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
 import '../../../../core/widgets/app_fields.dart';
@@ -11,6 +12,7 @@ import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../../shared/helpers/confirm.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../data/planner_models.dart';
 import '../../data/planner_service.dart';
@@ -95,7 +97,7 @@ class _NoteListScreenState extends State<NoteListScreen> with PlannerTickReload 
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
+          padding: AppDimensions.pagePaddingFab,
           children: [
             AppSearchField(
               hintText: 'Search notes',
@@ -225,7 +227,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               subtitle: 'This note was removed.',
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              padding: AppDimensions.pagePadding,
               children: [
                 Text(note.content, style: const TextStyle(fontSize: 16, height: 1.5)),
                 const SizedBox(height: 16),
@@ -264,6 +266,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 ),
                 TextButton(
                   onPressed: () async {
+                    final confirmed = await showAppConfirm(
+                      context,
+                      title: 'Delete this note?',
+                      message: '${note.title} will be removed. This cannot be undone.',
+                    );
+                    if (!confirmed || !mounted) return;
                     await _run(() => _api.deleteNote(note.id));
                     if (mounted) context.pop();
                   },

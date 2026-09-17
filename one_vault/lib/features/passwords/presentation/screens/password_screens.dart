@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -5,14 +7,22 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_dimensions.dart';
+import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/app_fields.dart';
+import '../../../../core/widgets/app_filter_chips.dart';
+import '../../../../core/widgets/app_page.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/form_page.dart';
+import '../../../../core/widgets/info_row.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 import '../../../../core/widgets/search_field.dart';
 import '../../../../core/widgets/shell_fab.dart';
 import '../../../../app/app_state.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../../shared/helpers/confirm.dart';
 import '../../../../shared/helpers/snack.dart';
 import '../../../../shared/models/models.dart';
 import '../../data/clipboard_guard.dart';
@@ -31,6 +41,16 @@ class PasswordListScreen extends StatefulWidget {
 class _PasswordListScreenState extends State<PasswordListScreen> {
   String _query = '';
   PasswordCategory? _category;
+  bool _requestedSync = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final vault = AppScope.of(context).vault;
+    if (_requestedSync || !vault.isUnlocked) return;
+    _requestedSync = true;
+    unawaited(vault.ensureRemoteSync());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,33 +98,32 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
       ),
       body: ListView(
         key: const Key('password-list'),
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
+        padding: AppDimensions.pagePaddingFab,
         children: [
           AppSearchField(
             hintText: 'Search passwords',
             onChanged: (value) => setState(() => _query = value),
           ),
           const SizedBox(height: 12),
-          _HealthCard(health: health),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _CategoryChip(
-                  label: 'All',
-                  selected: _category == null,
-                  onTap: () => setState(() => _category = null),
-                ),
-                ...PasswordCategory.values.map(
-                  (category) => _CategoryChip(
-                    label: category.label,
-                    selected: _category == category,
-                    onTap: () => setState(() => _category = category),
-                  ),
+                Text('Password health', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(
+                  'Weak ${health.weak} · Reused ${health.reused} · Old ${health.old} · Strong ${health.strong}',
+                  style: TextStyle(color: AppColors.muted(context), fontSize: 13),
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+          AppFilterChips<PasswordCategory>(
+            value: _category,
+            options: PasswordCategory.values,
+            labelOf: (category) => category.label,
+            onChanged: (value) => setState(() => _category = value),
           ),
           const SizedBox(height: 16),
           if (items.isEmpty)
@@ -118,9 +137,7 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
             )
           else
             ...items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: ListTileCard(
+              (item) => ListTileCard(
                   icon: item.isFavorite ? Icons.star : Icons.lock_outline,
                   title: item.title,
                   subtitle: '${item.username} · ${item.category.label}',
@@ -133,63 +150,10 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
                     ),
                   ),
                   onTap: () => context.push(AppRoutes.passwordDetail(item.id)),
+                  margin: AppDimensions.itemSpacing,
                 ),
-              ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _HealthCard extends StatelessWidget {
-  const _HealthCard({required this.health});
-
-  final PasswordHealthSummary health;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Password health', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            'Weak ${health.weak} · Reused ${health.reused} · Old ${health.old} · Strong ${health.strong}',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onTap(),
       ),
     );
   }
@@ -216,36 +180,35 @@ class _VaultSetupScreenState extends State<_VaultSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Passwords')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        children: [
-          const EmptyState(
-            icon: Icons.lock_outline,
-            title: 'Create your vault',
-            subtitle:
-                'This password encrypts your credentials on this device. It is never sent to the server.',
-          ),
-          const SizedBox(height: 24),
-          TextField(
-            controller: _password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Vault password'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _confirm,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Confirm vault password'),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _busy ? null : _setup,
-            child: Text(_busy ? 'Creating…' : 'Create vault'),
-          ),
-        ],
-      ),
+    return AppPage(
+      title: 'Passwords',
+      padding: AppDimensions.pagePaddingAuth,
+      children: [
+        const EmptyState(
+          icon: Icons.lock_outline,
+          title: 'Create your vault',
+          subtitle:
+              'This password encrypts your credentials on this device. It is never sent to the server.',
+        ),
+        const SizedBox(height: 24),
+        AppTextField(
+          controller: _password,
+          label: 'Vault password',
+          obscureText: true,
+        ),
+        AppDimensions.fieldGap,
+        AppTextField(
+          controller: _confirm,
+          label: 'Confirm vault password',
+          obscureText: true,
+        ),
+        const SizedBox(height: 20),
+        AppPrimaryButton(
+          label: _busy ? 'Creating…' : 'Create vault',
+          loading: _busy,
+          onPressed: _setup,
+        ),
+      ],
     );
   }
 
@@ -276,50 +239,36 @@ class _VaultUnlockScreen extends StatefulWidget {
 }
 
 class _VaultUnlockScreenState extends State<_VaultUnlockScreen> {
-  final _password = TextEditingController();
   bool _busy = false;
-
-  @override
-  void dispose() {
-    _password.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final vault = AppScope.of(context).vault;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Passwords')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        children: [
-          const EmptyState(
-            icon: Icons.lock,
-            title: 'Vault locked',
-            subtitle: 'Unlock to view and use your passwords.',
+    return AppPage(
+      title: 'Passwords',
+      padding: AppDimensions.pagePaddingAuth,
+      children: [
+        const EmptyState(
+          icon: Icons.lock,
+          title: 'Vault locked',
+          subtitle: 'Unlock to view and use your passwords.',
+        ),
+        const SizedBox(height: 24),
+        if (vault.biometricEnabled) ...[
+          AppPrimaryButton(
+            label: 'Unlock with device authentication',
+            icon: Icons.fingerprint,
+            loading: _busy,
+            onPressed: _biometric,
           ),
-          const SizedBox(height: 24),
-          if (vault.biometricEnabled) ...[
-            FilledButton.icon(
-              onPressed: _busy ? null : _biometric,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text('Unlock with device authentication'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          TextField(
-            controller: _password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Vault password'),
-            onSubmitted: (_) => _unlock(),
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _busy ? null : _unlock,
-            child: Text(_busy || vault.unlocking ? 'Unlocking…' : 'Unlock'),
-          ),
+          AppDimensions.fieldGap,
         ],
-      ),
+        AppPrimaryButton(
+          label: _busy || vault.unlocking ? 'Unlocking…' : 'Unlock',
+          loading: _busy || vault.unlocking,
+          onPressed: _unlock,
+        ),
+      ],
     );
   }
 
@@ -332,13 +281,9 @@ class _VaultUnlockScreenState extends State<_VaultUnlockScreen> {
   }
 
   Future<void> _unlock() async {
-    if (_password.text.trim().isEmpty) {
-      showAppSnack(context, 'Enter your vault password');
-      return;
-    }
     setState(() => _busy = true);
     try {
-      await AppScope.of(context).vault.unlockWithPassword(_password.text);
+      await AppScope.of(context).vault.unlock();
     } catch (error) {
       if (!mounted) return;
       showAppSnack(context, error.toString());
@@ -380,12 +325,10 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
     }
     final item = state.vault.byId(widget.id);
     if (item == null) {
-      return const Scaffold(
-        body: EmptyState(
-          icon: Icons.lock_outline,
-          title: 'Not found',
-          subtitle: 'This password was removed.',
-        ),
+      return const AppMissingPage(
+        icon: Icons.lock_outline,
+        title: 'Not found',
+        subtitle: 'This password was removed.',
       );
     }
 
@@ -409,10 +352,10 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: AppDimensions.pagePadding,
         children: [
-          _InfoRow(label: 'Category', value: item.category.label),
-          _InfoRow(
+          InfoRow(label: 'Category', value: item.category.label),
+          InfoRow(
             label: 'Username',
             value: item.username,
             action: IconButton(
@@ -420,7 +363,7 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
               icon: const Icon(Icons.copy),
             ),
           ),
-          _InfoRow(
+          InfoRow(
             label: 'Password',
             value: _revealed ? item.password : '••••••••••••',
             action: Row(
@@ -438,7 +381,7 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
             ),
           ),
           if (item.website.isNotEmpty)
-            _InfoRow(
+            InfoRow(
               label: 'Website',
               value: item.website,
               action: IconButton(
@@ -446,40 +389,34 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
                 icon: const Icon(Icons.open_in_new),
               ),
             ),
-          if (item.notes.isNotEmpty) _InfoRow(label: 'Notes', value: item.notes),
-          if (item.tags.isNotEmpty) _InfoRow(label: 'Tags', value: item.tags.join(', ')),
+          if (item.notes.isNotEmpty) InfoRow(label: 'Notes', value: item.notes),
+          if (item.tags.isNotEmpty) InfoRow(label: 'Tags', value: item.tags.join(', ')),
           if (item.recoveryEmail.isNotEmpty)
-            _InfoRow(label: 'Recovery email', value: item.recoveryEmail),
+            InfoRow(label: 'Recovery email', value: item.recoveryEmail),
           if (item.recoveryPhone.isNotEmpty)
-            _InfoRow(label: 'Recovery phone', value: item.recoveryPhone),
+            InfoRow(label: 'Recovery phone', value: item.recoveryPhone),
           if (item.twoFactorMethod.isNotEmpty)
-            _InfoRow(label: '2FA method', value: item.twoFactorMethod),
+            InfoRow(label: '2FA method', value: item.twoFactorMethod),
           if (item.backupCodes.isNotEmpty)
-            _InfoRow(
+            InfoRow(
               label: 'Backup codes',
               value: _revealed ? item.backupCodes : '••••••••',
             ),
           if (item.securityNotes.isNotEmpty)
-            _InfoRow(label: 'Security notes', value: item.securityNotes),
-          _InfoRow(label: 'Updated', value: Formatters.date(item.updatedAt)),
+            InfoRow(label: 'Security notes', value: item.securityNotes),
+          InfoRow(label: 'Updated', value: Formatters.date(item.updatedAt)),
         ],
       ),
     );
   }
 
   Future<void> _confirmDelete(AppState state, PasswordItem item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${item.title} credential?'),
-        content: const Text('This credential will be removed from OneVault.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-        ],
-      ),
+    final confirmed = await showAppConfirm(
+      context,
+      title: 'Delete this password?',
+      message: '${item.title} will be removed from OneVault. This cannot be undone.',
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     await state.deletePassword(item.id);
     if (!mounted) return;
     showAppSnack(context, 'Password deleted');
@@ -509,41 +446,6 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
     }
     if (!context.mounted) return;
     showAppSnack(context, message);
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.action,
-  });
-
-  final String label;
-  final String value;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-              ],
-            ),
-          ),
-          ?action,
-        ],
-      ),
-    );
   }
 }
 
@@ -627,36 +529,28 @@ class _PasswordFormScreenState extends State<PasswordFormScreen> {
       submitting: _saving,
       onSubmit: () => _save(AppScope.of(context)),
       children: [
-        TextField(
-          controller: _title,
-          decoration: const InputDecoration(labelText: 'Title'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _username,
-          decoration: const InputDecoration(labelText: 'Username'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
+        AppTextField(controller: _title, label: 'Title'),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _username, label: 'Username'),
+        AppDimensions.fieldGap,
+        AppTextField(
           controller: _password,
+          label: 'Password',
           obscureText: _hidePassword,
-          decoration: InputDecoration(
-            labelText: 'Password',
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: _hidePassword ? 'Show' : 'Hide',
-                  onPressed: () => setState(() => _hidePassword = !_hidePassword),
-                  icon: Icon(_hidePassword ? Icons.visibility : Icons.visibility_off),
-                ),
-                IconButton(
-                  tooltip: 'Generate',
-                  onPressed: _useGenerated,
-                  icon: const Icon(Icons.password),
-                ),
-              ],
-            ),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: _hidePassword ? 'Show' : 'Hide',
+                onPressed: () => setState(() => _hidePassword = !_hidePassword),
+                icon: Icon(_hidePassword ? Icons.visibility : Icons.visibility_off),
+              ),
+              IconButton(
+                tooltip: 'Generate',
+                onPressed: _useGenerated,
+                icon: const Icon(Icons.password),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -670,27 +564,20 @@ class _PasswordFormScreenState extends State<PasswordFormScreen> {
             },
           ),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _website,
-          decoration: const InputDecoration(labelText: 'Website'),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<PasswordCategory>(
-          initialValue: _category,
-          decoration: const InputDecoration(labelText: 'Category'),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _website, label: 'Website'),
+        AppDimensions.fieldGap,
+        AppDropdown<PasswordCategory>(
+          label: 'Category',
+          value: _category,
           items: PasswordCategory.values
               .map((item) => DropdownMenuItem(value: item, child: Text(item.label)))
               .toList(),
           onChanged: (value) => setState(() => _category = value ?? _category),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _notes,
-          maxLines: 3,
-          decoration: const InputDecoration(labelText: 'Notes'),
-        ),
-        const SizedBox(height: 16),
+        AppDimensions.fieldGap,
+        AppTextField(controller: _notes, label: 'Notes', maxLines: 3),
+        AppDimensions.sectionGap,
         const Text('Tags', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         Wrap(
@@ -703,30 +590,20 @@ class _PasswordFormScreenState extends State<PasswordFormScreen> {
               ),
           ],
         ),
-        TextField(
-          controller: _tag,
-          decoration: const InputDecoration(labelText: 'Add tag'),
-          onSubmitted: _addTag,
-        ),
+        AppTextField(controller: _tag, label: 'Add tag', onSubmitted: _addTag),
         const SizedBox(height: 20),
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
           title: const Text('Recovery & Security'),
           childrenPadding: const EdgeInsets.only(bottom: 8),
           children: [
-            TextField(
-              controller: _recoveryEmail,
-              decoration: const InputDecoration(labelText: 'Recovery email'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _recoveryPhone,
-              decoration: const InputDecoration(labelText: 'Recovery phone'),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _twoFactor,
-              decoration: const InputDecoration(labelText: '2FA method'),
+            AppTextField(controller: _recoveryEmail, label: 'Recovery email'),
+            AppDimensions.fieldGap,
+            AppTextField(controller: _recoveryPhone, label: 'Recovery phone'),
+            AppDimensions.fieldGap,
+            AppDropdown<String>(
+              label: '2FA method',
+              value: _twoFactor,
               items: const [
                 DropdownMenuItem(value: '', child: Text('None')),
                 DropdownMenuItem(value: 'Authenticator', child: Text('Authenticator')),
@@ -736,18 +613,10 @@ class _PasswordFormScreenState extends State<PasswordFormScreen> {
               ],
               onChanged: (value) => setState(() => _twoFactor = value ?? ''),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _backupCodes,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Backup codes'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _securityNotes,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Security notes'),
-            ),
+            AppDimensions.fieldGap,
+            AppTextField(controller: _backupCodes, label: 'Backup codes', maxLines: 3),
+            AppDimensions.fieldGap,
+            AppTextField(controller: _securityNotes, label: 'Security notes', maxLines: 3),
           ],
         ),
       ],
@@ -788,7 +657,7 @@ class _PasswordFormScreenState extends State<PasswordFormScreen> {
       if (widget.id == null) {
         await state.addPassword(
           PasswordItem(
-            id: state.vault.newId(),
+            id: '',
             title: _title.text.trim(),
             username: _username.text.trim(),
             password: _password.text,
@@ -867,7 +736,7 @@ class _PasswordGeneratorScreenState extends State<PasswordGeneratorScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Password generator')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: AppDimensions.pagePadding,
         children: [
           SelectableText(
             _generated,
@@ -922,9 +791,9 @@ class _PasswordGeneratorScreenState extends State<PasswordGeneratorScreen> {
             onChanged: (value) => _toggle(() => _excludeAmbiguous = value),
           ),
           const SizedBox(height: 12),
-          FilledButton(
+          AppPrimaryButton(
+            label: 'Generate',
             onPressed: () => setState(() => _generated = _generate()),
-            child: const Text('Generate'),
           ),
           const SizedBox(height: 8),
           FilledButton.tonal(

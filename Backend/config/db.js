@@ -16,6 +16,7 @@ if (sslMode === "prefer" || sslMode === "require" || sslMode === "verify-ca") {
 
 const pool = new Pool({
   connectionString: dbUrl.toString(),
+  options: "-c timezone=UTC",
 });
 
 pool.on("error", (err) => {
@@ -25,7 +26,8 @@ pool.on("error", (err) => {
 const connectDB = async () => {
   const client = await pool.connect();
   try {
-    await client.query("SELECT 1");
+    const result = await client.query("SELECT current_database() AS database");
+    console.log(`Database connected: ${result.rows[0].database}`);
   } finally {
     client.release();
   }

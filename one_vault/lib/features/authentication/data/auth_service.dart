@@ -56,7 +56,7 @@ class AuthService {
     final json = await _send(
       () => _api.get(
         '/api/auth/me',
-        headers: {'Authorization': 'Bearer $accessToken'},
+        headers: ApiClient.authHeaders(accessToken),
       ),
     );
     final data = json['data'] as Map<String, dynamic>;
@@ -88,18 +88,9 @@ class AuthService {
     Future<http.Response> Function() request,
   ) async {
     try {
-      final response = await request();
-      final decoded = response.body.isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return decoded;
-      }
-
-      throw AuthException(
-        (decoded['message'] as String?) ?? 'Request failed',
-        statusCode: response.statusCode,
+      return await ApiClient.readJson(
+        request,
+        onError: (message, status) => AuthException(message, statusCode: status),
       );
     } on AuthException {
       rethrow;

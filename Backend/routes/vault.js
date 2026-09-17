@@ -1,21 +1,21 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import {
-  deleteVaultCredential,
-  getVaultMeta,
-  listVaultCredentials,
-  putVaultMeta,
-  upsertVaultCredential,
+  createPassword,
+  deletePassword,
+  getPassword,
+  listPasswords,
+  updatePassword,
 } from "../controllers/vaultController.js";
 
 const router = Router();
 
 router.use(requireAuth);
 
-router.get("/meta", getVaultMeta);
-router.put("/meta", putVaultMeta);
-router.get("/credentials", listVaultCredentials);
-router.put("/credentials/:id", upsertVaultCredential);
-router.delete("/credentials/:id", deleteVaultCredential);
+router.get("/passwords", listPasswords);
+router.post("/passwords", createPassword);
+router.get("/passwords/:id", getPassword);
+router.patch("/passwords/:id", updatePassword);
+router.delete("/passwords/:id", deletePassword);
 
 export default router;

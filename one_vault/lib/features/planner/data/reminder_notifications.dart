@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../../core/network/device_time_zone.dart';
 import 'planner_models.dart';
 
 const _alarmChannelId = 'onevault_alarms';
@@ -58,6 +58,7 @@ class ReminderNotifications {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  Future<void>? _initFuture;
   bool _channelsReady = false;
   bool _restoring = false;
   bool _restoreQueued = false;
@@ -78,15 +79,19 @@ class ReminderNotifications {
     this.onTriggered = onTriggered;
   }
 
-  Future<void> init() async {
+  Future<void> init() {
+    return _initFuture ??= _doInit();
+  }
+
+  Future<void> _doInit() async {
     try {
       tzdata.initializeTimeZones();
       await _setLocalTimezone();
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
       final ios = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
         notificationCategories: [
           DarwinNotificationCategory(
             'onevault_reminder_alarm',
@@ -107,9 +112,6 @@ class ReminderNotifications {
         onDidReceiveBackgroundNotificationResponse: reminderNotificationBackground,
       );
       await _ensureChannels();
-      await _plugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
       final launch = await _plugin.getNotificationAppLaunchDetails();
       if (launch?.didNotificationLaunchApp == true) {
         _pendingTriggerId = parsePayload(launch!.notificationResponse?.payload);
@@ -119,14 +121,14 @@ class ReminderNotifications {
     } catch (error) {
       debugPrint('ERROR Notifications unavailable: $error');
       _ready = false;
+      _initFuture = null;
     }
   }
 
   Future<void> _setLocalTimezone() async {
     try {
-      final info = await FlutterTimezone.getLocalTimezone();
-      final name = info.identifier;
-      tz.setLocalLocation(tz.getLocation(name));
+      await DeviceTimeZone.init();
+      tz.setLocalLocation(tz.getLocation(DeviceTimeZone.current));
     } catch (error) {
       debugPrint('ERROR Timezone fallback UTC: $error');
       tz.setLocalLocation(tz.UTC);
@@ -244,6 +246,7 @@ class ReminderNotifications {
     PlannerReminder reminder, {
     bool requestExact = false,
   }) async {
+    if (!_ready) await init();
     if (!_ready) {
       return const ReminderScheduleResult(
         scheduled: false,
@@ -429,6 +432,7 @@ class ReminderNotifications {
   }
 
   Future<void> restorePending() async {
+    await init();
     final actions = _actions;
     if (!_ready || actions == null) return;
     if (_restoring) {

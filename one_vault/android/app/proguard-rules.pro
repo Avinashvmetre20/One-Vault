@@ -1,0 +1,4 @@
+-keep class io.flutter.** { *; }
+-keep class io.flutter.plugins.** { *; }
+-keep class in.avinashvmetre20.one_vault.** { *; }
+-dontwarn io.flutter.embedding.**

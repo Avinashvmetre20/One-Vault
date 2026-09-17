@@ -1,11 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'vault_models.dart';
+import '../../../shared/models/models.dart';
 
 enum VaultAutoLock { immediately, oneMinute, fiveMinutes, fifteenMinutes }
 
@@ -26,48 +25,31 @@ extension VaultAutoLockLabel on VaultAutoLock {
 }
 
 class VaultLocalStore {
-  VaultLocalStore({FlutterSecureStorage? secureStorage})
-    : _secure = secureStorage ??
-          const FlutterSecureStorage(
-            aOptions: AndroidOptions(encryptedSharedPreferences: true),
-          );
-
-  final FlutterSecureStorage _secure;
-
   Future<File> _file(int userId) async {
     final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/vault_$userId.json');
+    return File('${dir.path}/passwords_$userId.json');
   }
 
-  Future<VaultSnapshot> readSnapshot(int userId) async {
+  Future<List<PasswordItem>> readPasswords(int userId) async {
     try {
       final file = await _file(userId);
-      if (!await file.exists()) return const VaultSnapshot();
+      if (!await file.exists()) return const [];
       final raw = jsonDecode(await file.readAsString());
-      if (raw is Map<String, dynamic>) return VaultSnapshot.fromJson(raw);
-      return const VaultSnapshot();
+      if (raw is! List) return const [];
+      return raw
+          .whereType<Map>()
+          .map((item) => PasswordItem.fromPayload(Map<String, dynamic>.from(item)))
+          .toList();
     } catch (_) {
-      return const VaultSnapshot();
+      return const [];
     }
   }
 
-  Future<void> writeSnapshot(int userId, VaultSnapshot snapshot) async {
+  Future<void> writePasswords(int userId, List<PasswordItem> items) async {
     final file = await _file(userId);
-    await file.writeAsString(jsonEncode(snapshot.toJson()));
-  }
-
-  Future<void> saveDek(int userId, List<int> dekBytes) {
-    return _secure.write(key: 'vault_dek_$userId', value: base64Encode(dekBytes));
-  }
-
-  Future<List<int>?> readDek(int userId) async {
-    final raw = await _secure.read(key: 'vault_dek_$userId');
-    if (raw == null || raw.isEmpty) return null;
-    return base64Decode(raw);
-  }
-
-  Future<void> clearDek(int userId) {
-    return _secure.delete(key: 'vault_dek_$userId');
+    await file.writeAsString(
+      jsonEncode(items.map((item) => item.toPayload()).toList()),
+    );
   }
 
   Future<bool> biometricEnabled(int userId) async {
