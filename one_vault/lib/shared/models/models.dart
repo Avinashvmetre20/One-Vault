@@ -11,8 +11,17 @@ class PasswordItem {
     required this.notes,
     required this.tags,
     required this.updatedAt,
+    DateTime? createdAt,
     this.isFavorite = false,
-  });
+    this.version = 1,
+    this.recoveryEmail = '',
+    this.recoveryPhone = '',
+    this.twoFactorMethod = '',
+    this.backupCodes = '',
+    this.securityNotes = '',
+    this.domain = '',
+    this.deletedAt,
+  }) : createdAt = createdAt ?? updatedAt;
 
   final String id;
   final String title;
@@ -22,8 +31,17 @@ class PasswordItem {
   final PasswordCategory category;
   final String notes;
   final List<String> tags;
+  final DateTime createdAt;
   final DateTime updatedAt;
   final bool isFavorite;
+  final int version;
+  final String recoveryEmail;
+  final String recoveryPhone;
+  final String twoFactorMethod;
+  final String backupCodes;
+  final String securityNotes;
+  final String domain;
+  final DateTime? deletedAt;
 
   PasswordItem copyWith({
     String? title,
@@ -33,8 +51,18 @@ class PasswordItem {
     PasswordCategory? category,
     String? notes,
     List<String>? tags,
+    DateTime? createdAt,
     DateTime? updatedAt,
     bool? isFavorite,
+    int? version,
+    String? recoveryEmail,
+    String? recoveryPhone,
+    String? twoFactorMethod,
+    String? backupCodes,
+    String? securityNotes,
+    String? domain,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) {
     return PasswordItem(
       id: id,
@@ -45,8 +73,67 @@ class PasswordItem {
       category: category ?? this.category,
       notes: notes ?? this.notes,
       tags: tags ?? this.tags,
+      createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isFavorite: isFavorite ?? this.isFavorite,
+      version: version ?? this.version,
+      recoveryEmail: recoveryEmail ?? this.recoveryEmail,
+      recoveryPhone: recoveryPhone ?? this.recoveryPhone,
+      twoFactorMethod: twoFactorMethod ?? this.twoFactorMethod,
+      backupCodes: backupCodes ?? this.backupCodes,
+      securityNotes: securityNotes ?? this.securityNotes,
+      domain: domain ?? this.domain,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    );
+  }
+
+  Map<String, dynamic> toPayload() {
+    return {
+      'id': id,
+      'title': title,
+      'username': username,
+      'password': password,
+      'website': website,
+      'category': category.name,
+      'notes': notes,
+      'tags': tags,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'isFavorite': isFavorite,
+      'version': version,
+      'recoveryEmail': recoveryEmail,
+      'recoveryPhone': recoveryPhone,
+      'twoFactorMethod': twoFactorMethod,
+      'backupCodes': backupCodes,
+      'securityNotes': securityNotes,
+      'domain': domain,
+    };
+  }
+
+  factory PasswordItem.fromPayload(Map<String, dynamic> json) {
+    final categoryName = json['category'] as String? ?? 'other';
+    return PasswordItem(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? '',
+      username: json['username'] as String? ?? '',
+      password: json['password'] as String? ?? '',
+      website: json['website'] as String? ?? '',
+      category: PasswordCategory.values.firstWhere(
+        (item) => item.name == categoryName,
+        orElse: () => PasswordCategory.other,
+      ),
+      notes: json['notes'] as String? ?? '',
+      tags: (json['tags'] as List?)?.map((item) => item.toString()).toList() ?? const [],
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      isFavorite: json['isFavorite'] == true,
+      version: json['version'] is int ? json['version'] as int : 1,
+      recoveryEmail: json['recoveryEmail'] as String? ?? '',
+      recoveryPhone: json['recoveryPhone'] as String? ?? '',
+      twoFactorMethod: json['twoFactorMethod'] as String? ?? '',
+      backupCodes: json['backupCodes'] as String? ?? '',
+      securityNotes: json['securityNotes'] as String? ?? '',
+      domain: json['domain'] as String? ?? '',
     );
   }
 }

@@ -58,6 +58,18 @@ class ApiClient {
     );
   }
 
+  Future<http.Response> put(
+    String path, {
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    return _send(
+      method: 'PUT',
+      path: path,
+      request: () => _client.put(_uri(path), headers: headers, body: body),
+    );
+  }
+
   Future<http.Response> delete(
     String path, {
     Map<String, String>? headers,
@@ -76,18 +88,17 @@ class ApiClient {
     required Future<http.Response> Function() request,
   }) async {
     final startedAt = DateTime.now();
+    final url = '${ApiConfig.baseUrl}$path';
     try {
       final response = await request().timeout(_timeout);
-      _log(method, path, startedAt);
+      final ms = DateTime.now().difference(startedAt).inMilliseconds;
+      final line = '$method $url ${response.statusCode} ${ms}ms';
+      debugPrint(response.statusCode >= 400 ? 'ERROR $line' : line);
       return response;
-    } catch (_) {
-      _log(method, path, startedAt);
+    } catch (error) {
+      final ms = DateTime.now().difference(startedAt).inMilliseconds;
+      debugPrint('ERROR $method $url ${ms}ms $error');
       rethrow;
     }
-  }
-
-  void _log(String method, String path, DateTime startedAt) {
-    final ms = DateTime.now().difference(startedAt).inMilliseconds;
-    debugPrint('$method ${ApiConfig.baseUrl}$path ${ms}ms');
   }
 }

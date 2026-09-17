@@ -69,10 +69,10 @@ export const register = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const created = await pool.query(
-      `INSERT INTO users (name, email, phone, password, "actual password")
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (name, email, phone, password)
+       VALUES ($1, $2, $3, $4)
        RETURNING user_id, name, email, phone, created_at, updated_at`,
-      [name, email, phone, passwordHash, password]
+      [name, email, phone, passwordHash]
     );
 
     const user = created.rows[0];

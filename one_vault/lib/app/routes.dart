@@ -59,5 +59,6 @@ abstract final class AppRoutes {
   static const profile = '/more/profile';
   static const security = '/more/security';
   static const pinSetup = '/more/security/pin';
+  static const autofillSetup = '/more/security/autofill';
   static const settings = '/more/settings';
 }

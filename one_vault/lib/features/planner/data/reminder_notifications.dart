@@ -49,11 +49,7 @@ class ReminderAlarmActions {
 }
 
 @pragma('vm:entry-point')
-void reminderNotificationBackground(NotificationResponse response) {
-  debugPrint(
-    '[ReminderAlarm] Background response ${response.payload} action=${response.actionId}',
-  );
-}
+void reminderNotificationBackground(NotificationResponse _) {}
 
 class ReminderNotifications {
   ReminderNotifications._();
@@ -120,9 +116,8 @@ class ReminderNotifications {
         _pendingActionId = launch.notificationResponse?.actionId;
       }
       _ready = true;
-      debugPrint('[ReminderAlarm] Initialized');
     } catch (error) {
-      debugPrint('[ReminderAlarm] Notifications unavailable: $error');
+      debugPrint('ERROR Notifications unavailable: $error');
       _ready = false;
     }
   }
@@ -132,9 +127,8 @@ class ReminderNotifications {
       final info = await FlutterTimezone.getLocalTimezone();
       final name = info.identifier;
       tz.setLocalLocation(tz.getLocation(name));
-      debugPrint('[ReminderAlarm] Local timezone $name');
     } catch (error) {
-      debugPrint('[ReminderAlarm] Timezone fallback UTC: $error');
+      debugPrint('ERROR Timezone fallback UTC: $error');
       tz.setLocalLocation(tz.UTC);
     }
   }
@@ -208,7 +202,7 @@ class ReminderNotifications {
         try {
           await android.requestFullScreenIntentPermission();
         } catch (error) {
-          debugPrint('[ReminderAlarm] Full-screen intent permission: $error');
+          debugPrint('ERROR Full-screen intent permission: $error');
         }
       } else {
         exactAlarmsAllowed = await android.canScheduleExactNotifications() ?? true;
@@ -259,13 +253,11 @@ class ReminderNotifications {
     try {
       await cancel(reminder.id);
       if (reminder.status != ReminderStatus.pending) {
-        debugPrint('[ReminderAlarm] Skip schedule ${reminder.id} status=${reminder.status.name}');
         return const ReminderScheduleResult(scheduled: false);
       }
       var when = reminder.when;
       if (!when.isAfter(DateTime.now())) {
         if (reminder.repeatType == RepeatType.none || _actions == null) {
-          debugPrint('[ReminderAlarm] Skip past reminder ${reminder.id}');
           return const ReminderScheduleResult(scheduled: false);
         }
         reminder = await _advanceToFuture(reminder);
@@ -277,7 +269,6 @@ class ReminderNotifications {
 
       final permissions = await ensurePermissions(requestExact: requestExact);
       if (!permissions.notificationsAllowed) {
-        debugPrint('[ReminderAlarm] Notifications denied for ${reminder.id}');
         return ReminderScheduleResult(
           scheduled: false,
           notificationsAllowed: false,
@@ -317,9 +308,6 @@ class ReminderNotifications {
         androidScheduleMode: mode,
         payload: '$_payloadPrefix${reminder.id}',
       );
-      debugPrint(
-        '[ReminderAlarm] Scheduling reminder ${reminder.id} at $when exact=${permissions.exactAlarmsAllowed}',
-      );
       if (!permissions.exactAlarmsAllowed) {
         return const ReminderScheduleResult(
           scheduled: true,
@@ -333,7 +321,7 @@ class ReminderNotifications {
         exactAlarmsAllowed: permissions.exactAlarmsAllowed,
       );
     } catch (error) {
-      debugPrint('[ReminderAlarm] Could not schedule reminder ${reminder.id}: $error');
+      debugPrint('ERROR Could not schedule reminder ${reminder.id}: $error');
       return ReminderScheduleResult(
         scheduled: false,
         message: 'Could not schedule the alarm. The reminder was saved.',
@@ -416,7 +404,7 @@ class ReminderNotifications {
         }
       }
     } catch (error) {
-      debugPrint('[ReminderAlarm] cancelAllManaged failed: $error');
+      debugPrint('ERROR cancelAllManaged failed: $error');
     }
   }
 
@@ -424,7 +412,6 @@ class ReminderNotifications {
     if (!_ready) return;
     await _plugin.cancel(reminderId);
     if (_ringingId == reminderId) _ringingId = null;
-    debugPrint('[ReminderAlarm] Cancelled reminder $reminderId');
   }
 
   Future<void> stopRinging(int reminderId) async {
@@ -434,7 +421,6 @@ class ReminderNotifications {
   bool markRinging(int reminderId) {
     if (_ringingId == reminderId) return false;
     _ringingId = reminderId;
-    debugPrint('[ReminderAlarm] Triggered reminder $reminderId');
     return true;
   }
 
@@ -453,7 +439,6 @@ class ReminderNotifications {
     try {
       do {
         _restoreQueued = false;
-        debugPrint('[ReminderAlarm] Restoring pending reminders');
         final pending = await actions.loadPending();
         final keep = <int>{};
         for (final reminder in pending) {
@@ -469,7 +454,7 @@ class ReminderNotifications {
         }
       } while (_restoreQueued);
     } catch (error) {
-      debugPrint('[ReminderAlarm] Restore failed: $error');
+      debugPrint('ERROR Restore failed: $error');
     } finally {
       _restoring = false;
     }
@@ -520,10 +505,9 @@ class ReminderNotifications {
     }
     try {
       final updated = await actions.snooze(reminderId, minutes);
-      debugPrint('[ReminderAlarm] Snoozed reminder $reminderId until ${updated.when}');
       await sync(updated);
     } catch (error) {
-      debugPrint('[ReminderAlarm] Snooze failed $reminderId: $error');
+      debugPrint('ERROR Snooze failed $reminderId: $error');
       onTriggered?.call(reminderId);
     }
   }
@@ -537,10 +521,9 @@ class ReminderNotifications {
     }
     try {
       final updated = await actions.dismiss(reminderId);
-      debugPrint('[ReminderAlarm] Dismissed reminder $reminderId next=${updated.when}');
       await sync(updated);
     } catch (error) {
-      debugPrint('[ReminderAlarm] Dismiss failed $reminderId: $error');
+      debugPrint('ERROR Dismiss failed $reminderId: $error');
       onTriggered?.call(reminderId);
     }
   }
@@ -556,7 +539,6 @@ class ReminderNotifications {
         guard < 400) {
       current = await actions.advanceRecurring(current.id);
       guard++;
-      debugPrint('[ReminderAlarm] Next occurrence: ${current.when}');
     }
     return current;
   }

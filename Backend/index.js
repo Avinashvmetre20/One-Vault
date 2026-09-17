@@ -5,6 +5,7 @@ import { pool, connectDB } from "./config/db.js";
 import { initSchema } from "./db/init.js";
 import authRoutes from "./routes/auth.js";
 import plannerRoutes from "./routes/planner.js";
+import vaultRoutes from "./routes/vault.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,10 @@ app.get("/", (req, res) => {
       reminders: "/api/v1/planner/reminders",
       calendar: "/api/v1/planner/calendar",
     },
+    vault: {
+      meta: "/api/v1/vault/meta",
+      credentials: "/api/v1/vault/credentials",
+    },
   });
 });
 
@@ -60,6 +65,7 @@ app.get("/health", async (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/v1/planner", plannerRoutes);
+app.use("/api/v1/vault", vaultRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -79,9 +85,7 @@ app.use((err, req, res, next) => {
 try {
   await connectDB();
   await initSchema();
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  app.listen(PORT, "0.0.0.0");
 } catch (error) {
   console.error("Failed to start server:", error.message);
   process.exit(1);

@@ -353,6 +353,11 @@ GoRouter createRouter(AppState appState) {
                         path: 'pin',
                         builder: (context, state) => const PinSetupScreen(),
                       ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'autofill',
+                        builder: (context, state) => const AutofillSetupScreen(),
+                      ),
                     ],
                   ),
                   GoRoute(

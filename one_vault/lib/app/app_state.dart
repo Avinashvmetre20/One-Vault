@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../features/authentication/data/auth_models.dart';
 import '../features/authentication/data/auth_service.dart';
 import '../features/authentication/data/auth_storage.dart';
+import '../features/passwords/data/vault_service.dart';
 import '../features/planner/data/planner_service.dart';
 import '../shared/enums/enums.dart';
 import '../shared/models/models.dart';
@@ -12,18 +13,28 @@ import '../shared/models/models.dart';
 class AppState extends ChangeNotifier {
   AppState({
     this.restoreOnStart = true,
+    this.demoVault = false,
     AuthService? authService,
     AuthStorage? authStorage,
   }) : _injectedAuthService = authService,
        _injectedAuthStorage = authStorage {
+    vault = VaultService(
+      token: () => accessToken,
+      userId: () => sessionUser?.userId,
+      memoryOnly: demoVault,
+      onChanged: notifyListeners,
+    );
     _seed();
+    if (demoVault) {
+      vault.unlockDemo(_demoPasswords());
+    }
     if (!restoreOnStart) {
       isReady = true;
     }
   }
 
   factory AppState.authenticated() {
-    final state = AppState(restoreOnStart: false);
+    final state = AppState(restoreOnStart: false, demoVault: true);
     state.accessToken = 'test-access-token';
     state.refreshToken = 'test-refresh-token';
     state.sessionUser = AuthUser(
@@ -36,6 +47,7 @@ class AppState extends ChangeNotifier {
   }
 
   final bool restoreOnStart;
+  final bool demoVault;
   final AuthService? _injectedAuthService;
   final AuthStorage? _injectedAuthStorage;
   AuthService? _authServiceInstance;
@@ -55,12 +67,14 @@ class AppState extends ChangeNotifier {
   SecuritySettings security = SecuritySettings();
   late PersonalInfo profile;
 
+  late final VaultService vault;
+
   bool get isLoggedIn =>
       accessToken != null &&
       accessToken!.isNotEmpty &&
       sessionUser != null;
 
-  final List<PasswordItem> passwords = [];
+  List<PasswordItem> get passwords => vault.credentials;
   final List<DocumentItem> documents = [];
   final List<PhotoItem> photos = [];
   final List<FileItem> files = [];
@@ -128,10 +142,14 @@ class AppState extends ChangeNotifier {
       }
     } catch (_) {
       await clearSession(notify: false);
-    } finally {
-      isReady = true;
-      notifyListeners();
     }
+
+    if (sessionUser != null) {
+      await vault.bind();
+    }
+
+    isReady = true;
+    notifyListeners();
 
     if (accessToken != null && accessToken!.isNotEmpty) {
       unawaited(_refreshSessionInBackground());
@@ -188,6 +206,7 @@ class AppState extends ChangeNotifier {
     sessionUser = null;
     shellTabIndex.value = 0;
     await _authStorage.clear();
+    await vault.lock(clearUser: true);
     if (notify) notifyListeners();
   }
 
@@ -196,6 +215,7 @@ class AppState extends ChangeNotifier {
     refreshToken = result.tokens.refreshToken;
     _applyUser(result.user);
     await _authStorage.save(result.tokens, user: result.user);
+    await vault.bind();
     notifyListeners();
   }
 
@@ -229,22 +249,13 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  void addPassword(PasswordItem item) {
-    passwords.insert(0, item);
-    notifyListeners();
-  }
+  Future<void> addPassword(PasswordItem item) => vault.upsert(item);
 
-  void updatePassword(PasswordItem item) {
-    final index = passwords.indexWhere((entry) => entry.id == item.id);
-    if (index == -1) return;
-    passwords[index] = item;
-    notifyListeners();
-  }
+  Future<void> updatePassword(PasswordItem item) => vault.upsert(item);
 
-  void deletePassword(String id) {
-    passwords.removeWhere((item) => item.id == id);
-    notifyListeners();
-  }
+  Future<void> deletePassword(String id) => vault.delete(id);
+
+  Future<void> togglePasswordFavorite(String id) => vault.toggleFavorite(id);
 
   void addDocument(DocumentItem item) {
     documents.insert(0, item);
@@ -284,87 +295,6 @@ class AppState extends ChangeNotifier {
       employeeId: 'OV-204',
       designation: 'Product Engineer',
     );
-
-    passwords.addAll([
-      PasswordItem(
-        id: 'pwd-1',
-        title: 'HDFC NetBanking',
-        username: 'avinash.hdfc',
-        password: 'Hdfc#Secure92',
-        website: 'https://netbanking.hdfcbank.com',
-        category: PasswordCategory.banking,
-        notes: 'Primary savings account login',
-        tags: const ['bank', 'hdfc'],
-        updatedAt: DateTime(2026, 9, 12),
-        isFavorite: true,
-      ),
-      PasswordItem(
-        id: 'pwd-2',
-        title: 'Gmail',
-        username: 'avinash@gmail.com',
-        password: 'Mail!2026',
-        website: 'https://gmail.com',
-        category: PasswordCategory.email,
-        notes: '',
-        tags: const ['email'],
-        updatedAt: DateTime(2026, 8, 30),
-      ),
-      PasswordItem(
-        id: 'pwd-3',
-        title: 'Instagram',
-        username: 'avinash.creates',
-        password: 'Ig#Vault16',
-        website: 'https://instagram.com',
-        category: PasswordCategory.socialMedia,
-        notes: '',
-        tags: const ['social'],
-        updatedAt: DateTime(2026, 7, 21),
-      ),
-      PasswordItem(
-        id: 'pwd-4',
-        title: 'Amazon',
-        username: 'avinash@example.com',
-        password: 'Shop@Prime1',
-        website: 'https://amazon.in',
-        category: PasswordCategory.shopping,
-        notes: 'Prime membership',
-        tags: const ['shopping'],
-        updatedAt: DateTime(2026, 9, 4),
-      ),
-      PasswordItem(
-        id: 'pwd-5',
-        title: 'GitHub',
-        username: 'avinash-dev',
-        password: 'DevOps#4421',
-        website: 'https://github.com',
-        category: PasswordCategory.development,
-        notes: 'Work repositories',
-        tags: const ['dev'],
-        updatedAt: DateTime(2026, 9, 1),
-      ),
-      PasswordItem(
-        id: 'pwd-6',
-        title: 'Home Wi-Fi',
-        username: 'Airtel_5G',
-        password: 'HomeNet@88',
-        website: '',
-        category: PasswordCategory.wifi,
-        notes: 'Living room router',
-        tags: const ['home'],
-        updatedAt: DateTime(2026, 6, 11),
-      ),
-      PasswordItem(
-        id: 'pwd-7',
-        title: 'Netflix',
-        username: 'avinash@example.com',
-        password: 'Stream#2026',
-        website: 'https://netflix.com',
-        category: PasswordCategory.entertainment,
-        notes: '',
-        tags: const ['ott'],
-        updatedAt: DateTime(2026, 9, 5),
-      ),
-    ]);
 
     documents.addAll([
       DocumentItem(
@@ -608,5 +538,88 @@ class AppState extends ChangeNotifier {
         merchant: 'HDFC Bank',
       ),
     ]);
+  }
+
+  List<PasswordItem> _demoPasswords() {
+    return [
+      PasswordItem(
+        id: 'pwd-1',
+        title: 'HDFC NetBanking',
+        username: 'avinash.hdfc',
+        password: 'Hdfc#Secure92',
+        website: 'https://netbanking.hdfcbank.com',
+        category: PasswordCategory.banking,
+        notes: 'Primary savings account login',
+        tags: const ['bank', 'hdfc'],
+        updatedAt: DateTime(2026, 9, 12),
+        isFavorite: true,
+      ),
+      PasswordItem(
+        id: 'pwd-2',
+        title: 'Gmail',
+        username: 'avinash@gmail.com',
+        password: 'Mail!2026',
+        website: 'https://gmail.com',
+        category: PasswordCategory.email,
+        notes: '',
+        tags: const ['email'],
+        updatedAt: DateTime(2026, 8, 30),
+      ),
+      PasswordItem(
+        id: 'pwd-3',
+        title: 'Instagram',
+        username: 'avinash.creates',
+        password: 'Ig#Vault16',
+        website: 'https://instagram.com',
+        category: PasswordCategory.socialMedia,
+        notes: '',
+        tags: const ['social'],
+        updatedAt: DateTime(2026, 7, 21),
+      ),
+      PasswordItem(
+        id: 'pwd-4',
+        title: 'Amazon',
+        username: 'avinash@example.com',
+        password: 'Shop@Prime1',
+        website: 'https://amazon.in',
+        category: PasswordCategory.shopping,
+        notes: 'Prime membership',
+        tags: const ['shopping'],
+        updatedAt: DateTime(2026, 9, 4),
+      ),
+      PasswordItem(
+        id: 'pwd-5',
+        title: 'GitHub',
+        username: 'avinash-dev',
+        password: 'DevOps#4421',
+        website: 'https://github.com',
+        category: PasswordCategory.development,
+        notes: 'Work repositories',
+        tags: const ['dev'],
+        updatedAt: DateTime(2026, 9, 1),
+      ),
+      PasswordItem(
+        id: 'pwd-6',
+        title: 'Home Wi-Fi',
+        username: 'Airtel_5G',
+        password: 'HomeNet@88',
+        website: '',
+        category: PasswordCategory.wifi,
+        notes: 'Living room router',
+        tags: const ['home'],
+        updatedAt: DateTime(2026, 6, 11),
+      ),
+      PasswordItem(
+        id: 'pwd-7',
+        title: 'Netflix',
+        username: 'avinash@example.com',
+        password: 'Stream#2026',
+        website: 'https://netflix.com',
+        category: PasswordCategory.entertainment,
+        notes: '',
+        tags: const ['ott'],
+        updatedAt: DateTime(2026, 9, 5),
+      ),
+    ];
   }
 }

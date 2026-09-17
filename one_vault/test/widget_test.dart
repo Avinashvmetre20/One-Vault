@@ -118,6 +118,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('HDFC NetBanking'), findsOneWidget);
+    await tester.drag(find.byKey(const Key('password-list')), const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(find.text('Gmail'), findsOneWidget);
   });
 }

@@ -46,7 +46,8 @@ class _SearchScreenState extends State<SearchScreen> {
               .where(
                 (item) =>
                     item.title.toLowerCase().contains(q) ||
-                    item.username.toLowerCase().contains(q),
+                    item.username.toLowerCase().contains(q) ||
+                    item.tags.any((tag) => tag.toLowerCase().contains(q)),
               )
               .toList();
     final documentHits = q.isEmpty

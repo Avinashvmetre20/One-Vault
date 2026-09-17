@@ -19,7 +19,11 @@ class VaultHubScreen extends StatelessWidget {
           HubCard(
             icon: Icons.lock_outline,
             title: 'Passwords',
-            subtitle: '${state.passwords.length} credentials',
+            subtitle: state.vault.isUnlocked
+                ? '${state.passwords.length} credentials'
+                : state.vault.isSetup
+                    ? 'Locked'
+                    : 'Set up vault',
             onTap: () => context.push(AppRoutes.passwords),
           ),
           HubCard(

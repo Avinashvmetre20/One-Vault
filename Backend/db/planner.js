@@ -164,8 +164,6 @@ export const initPlannerSchema = async () => {
     CREATE INDEX IF NOT EXISTS calendar_events_user_start_at_idx
       ON calendar_events (user_id, start_at);
   `);
-
-  console.log("Planner schema ready");
 };
 
 export const ensureDefaultPlannerData = async (userId) => {

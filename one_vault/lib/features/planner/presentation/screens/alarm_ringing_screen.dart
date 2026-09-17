@@ -97,7 +97,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
     await _finish(() async {
       await ReminderNotifications.instance.stopRinging(widget.id);
       final updated = await _api.snoozeReminder(widget.id, minutes: minutes);
-      debugPrint('[ReminderAlarm] Snoozed reminder ${widget.id} until ${updated.when}');
       await ReminderNotifications.instance.sync(updated);
     });
   }
@@ -106,7 +105,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen> {
     await _finish(() async {
       await ReminderNotifications.instance.stopRinging(widget.id);
       final updated = await _api.completeReminder(widget.id);
-      debugPrint('[ReminderAlarm] Dismissed reminder ${widget.id}');
       await ReminderNotifications.instance.sync(updated);
     });
   }

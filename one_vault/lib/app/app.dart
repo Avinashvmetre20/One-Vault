@@ -20,7 +20,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final AppState _appState;
   late final GoRouter _router;
   int? _pendingAlarmId;
@@ -33,6 +33,7 @@ class _MyAppState extends State<MyApp> {
     _router = createRouter(_appState);
     _bindAlarms();
     _appState.addListener(_onAppStateChanged);
+    WidgetsBinding.instance.addObserver(this);
     if (_appState.restoreOnStart) {
       unawaited(_appState.restoreSession());
     } else {
@@ -120,7 +121,19 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _appState.vault.onBackgrounded();
+    } else if (state == AppLifecycleState.resumed) {
+      _appState.vault.onResumed();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _appState.removeListener(_onAppStateChanged);
     _router.dispose();
     super.dispose();

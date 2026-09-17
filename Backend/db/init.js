@@ -1,5 +1,6 @@
 import { pool } from "../config/db.js";
 import { initPlannerSchema } from "./planner.js";
+import { initVaultSchema } from "./vault.js";
 
 const tableExists = async (tableName) => {
   const result = await pool.query(
@@ -40,7 +41,6 @@ export const initSchema = async () => {
           email VARCHAR(255) NOT NULL,
           phone VARCHAR(20),
           password TEXT NOT NULL,
-          "actual password" TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -56,7 +56,6 @@ export const initSchema = async () => {
         ALTER TABLE users
           ALTER COLUMN user_id SET DEFAULT nextval('users_user_id_seq');
       `);
-      console.log("Migrated users.id to serial user_id");
     }
   }
 
@@ -81,13 +80,12 @@ export const initSchema = async () => {
       email VARCHAR(255) NOT NULL,
       phone VARCHAR(20),
       password TEXT NOT NULL,
-      "actual password" TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS "actual password" TEXT;
+      DROP COLUMN IF EXISTS "actual password";
 
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx
       ON users (LOWER(email));
@@ -105,5 +103,5 @@ export const initSchema = async () => {
   `);
 
   await initPlannerSchema();
-  console.log("Database schema ready");
+  await initVaultSchema();
 };
