@@ -47,11 +47,12 @@ class VaultService extends ChangeNotifier {
   bool _unlocked = false;
   bool _memoryUnlocked = false;
   bool _hydrated = false;
-  bool _remoteSynced = false;
+  bool _setup = false;
   Future<void>? _syncing;
 
   bool get isUnlocked => memoryOnly ? _memoryUnlocked : _unlocked;
-  bool get isSetup => true;
+  bool get isSetup => memoryOnly ? true : _setup;
+  bool get syncing => _syncing != null;
 
   List<PasswordItem> get credentials {
     if (!isUnlocked) return const [];
@@ -74,9 +75,13 @@ class VaultService extends ChangeNotifier {
     if (userId == null) return;
     autoLock = await _store.autoLock(userId);
     biometricEnabled = await _store.biometricEnabled(userId);
-    final cached = await _store.readPasswords(userId);
-    _replace(cached);
-    _unlocked = true;
+    await _store.clearPasswords(userId);
+    await AutofillBridge.clearCredentials();
+    try {
+      _setup = await _api.isSetup();
+    } catch (_) {
+      _setup = false;
+    }
     _hydrated = true;
     _notify();
   }
@@ -88,25 +93,67 @@ class VaultService extends ChangeNotifier {
   }
 
   Future<void> setup(String masterPassword) async {
-    await unlock();
+    final passcode = masterPassword.trim();
+    if (passcode.length < 6) {
+      throw const VaultException('Vault passcode must be at least 6 characters');
+    }
+    try {
+      await _api.setup(passcode);
+    } on VaultApiException catch (error) {
+      if (error.statusCode == 409) {
+        _setup = true;
+        _notify();
+        throw const VaultException('Vault already set up. Unlock with your passcode.');
+      }
+      throw VaultException(error.message);
+    }
+    _setup = true;
+    await _openVault();
   }
 
   Future<void> unlockWithPassword(String masterPassword) async {
-    await unlock();
-  }
-
-  Future<void> unlock() async {
+    final passcode = masterPassword.trim();
+    if (passcode.isEmpty) {
+      throw const VaultException('Enter your vault passcode');
+    }
     unlocking = true;
     _notify();
     try {
-      await sync();
-      _unlocked = true;
-      await _importAutofillSaves();
-      await _syncAutofillCache();
+      try {
+        await _api.unlock(passcode);
+      } on VaultApiException catch (error) {
+        throw VaultException(error.message);
+      }
+      await _openVault();
     } finally {
       unlocking = false;
       _notify();
     }
+  }
+
+  Future<void> unlock() async {
+    if (!_setup) {
+      throw const VaultException('Set up the vault first');
+    }
+    unlocking = true;
+    _notify();
+    try {
+      await _openVault();
+    } finally {
+      unlocking = false;
+      _notify();
+    }
+  }
+
+  Future<void> _openVault() async {
+    try {
+      await sync();
+    } catch (_) {
+      _plain.clear();
+    }
+    _unlocked = true;
+    await _importAutofillSaves();
+    _notify();
   }
 
   Future<bool> unlockWithBiometric() async {
@@ -132,10 +179,12 @@ class VaultService extends ChangeNotifier {
     _memoryUnlocked = false;
     _backgroundedAt = null;
     _plain.clear();
+    final userId = _userId();
+    if (userId != null) await _store.clearPasswords(userId);
+    await AutofillBridge.clearCredentials();
     if (clearUser) {
       _hydrated = false;
-      _remoteSynced = false;
-      await AutofillBridge.clearCredentials();
+      _setup = false;
     }
     _notify();
   }
@@ -199,8 +248,6 @@ class VaultService extends ChangeNotifier {
     }
     _plain.remove(item.id);
     _plain[saved.id] = saved;
-    await _writeLocal();
-    await _syncAutofillCache();
     _notify();
   }
 
@@ -221,15 +268,27 @@ class VaultService extends ChangeNotifier {
         _plain[id] = item;
         throw VaultException(error.message);
       }
-      await _writeLocal();
-      await _syncAutofillCache();
     }
     _notify();
   }
 
-  Future<void> ensureRemoteSync() {
-    if (memoryOnly || _remoteSynced) return Future.value();
-    return sync();
+  Future<void> refreshFromServer() async {
+    try {
+      await sync();
+    } catch (_) {}
+  }
+
+  Future<void> refreshHub() async {
+    if (memoryOnly) return;
+    try {
+      _setup = await _api.isSetup();
+      _hydrated = true;
+    } catch (_) {}
+    if (isUnlocked) {
+      await refreshFromServer();
+      return;
+    }
+    _notify();
   }
 
   Future<void> sync() async {
@@ -238,33 +297,18 @@ class VaultService extends ChangeNotifier {
     if (inFlight != null) return inFlight;
     final future = _syncRemote();
     _syncing = future;
+    _notify();
     try {
       await future;
     } finally {
       if (identical(_syncing, future)) _syncing = null;
+      _notify();
     }
   }
 
   Future<void> _syncRemote() async {
-    try {
-      final remote = await _api.list();
-      _replace(remote);
-      await _writeLocal();
-      _remoteSynced = true;
-    } catch (_) {
-      if (_plain.isEmpty) {
-        final userId = _userId();
-        if (userId != null) {
-          _replace(await _store.readPasswords(userId));
-        }
-      }
-    }
-  }
-
-  Future<void> _writeLocal() async {
-    final userId = _userId();
-    if (userId == null || memoryOnly) return;
-    await _store.writePasswords(userId, _plain.values.toList());
+    final remote = await _api.list();
+    _replace(remote);
   }
 
   Future<void> _importAutofillSaves() async {
@@ -319,11 +363,6 @@ class VaultService extends ChangeNotifier {
         );
       }
     }
-  }
-
-  Future<void> _syncAutofillCache() async {
-    if (memoryOnly || !isUnlocked) return;
-    await AutofillBridge.syncCredentials(credentials);
   }
 
   void _replace(Iterable<PasswordItem> items) {

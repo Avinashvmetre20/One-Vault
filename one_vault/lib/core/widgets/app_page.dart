@@ -27,6 +27,7 @@ class AppPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final list = ListView(
       key: listKey,
+      physics: refresh == null ? null : const AlwaysScrollableScrollPhysics(),
       padding: padding ??
           (fab == null ? AppDimensions.pagePadding : AppDimensions.pagePaddingFab),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

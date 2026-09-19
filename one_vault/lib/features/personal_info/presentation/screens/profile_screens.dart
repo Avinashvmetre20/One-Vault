@@ -21,6 +21,7 @@ class MoreScreen extends StatelessWidget {
     final profile = AppScope.of(context).profile;
     return AppPage(
       title: 'More',
+      refresh: AppScope.of(context).refreshProfile,
       children: [
         ListTileCard(
           icon: Icons.person_outline,

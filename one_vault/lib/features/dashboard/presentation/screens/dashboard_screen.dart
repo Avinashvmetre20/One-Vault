@@ -5,6 +5,7 @@ import '../../../../app/app_scope.dart';
 import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_dimensions.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/widgets/action_card.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/list_tile_card.dart';
@@ -14,8 +15,28 @@ import '../../../../app/app_state.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final _api = ApiClient();
+  bool? _healthy;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkHealth();
+  }
+
+  Future<void> _checkHealth() async {
+    final ok = await _api.checkHealth();
+    if (!mounted) return;
+    setState(() => _healthy = ok);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,14 +47,17 @@ class DashboardScreen extends StatelessWidget {
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             final padding = AppDimensions.horizontalPadding(width);
-            return CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
+            return RefreshIndicator(
+              onRefresh: _checkHealth,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(padding, 24, padding, 16),
                   sliver: SliverToBoxAdapter(
                     child: _HomeHeader(
                       name: state.profile.name,
+                      healthy: _healthy,
                       onOpenProfile: () => context.push(AppRoutes.profile),
                     ),
                   ),
@@ -112,7 +136,8 @@ class DashboardScreen extends StatelessWidget {
                   padding: EdgeInsets.fromLTRB(padding, 0, padding, 30),
                   sliver: const SliverToBoxAdapter(child: _RecentItems()),
                 ),
-              ],
+                ],
+              ),
             );
           },
         ),
@@ -122,9 +147,14 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({required this.name, required this.onOpenProfile});
+  const _HomeHeader({
+    required this.name,
+    required this.healthy,
+    required this.onOpenProfile,
+  });
 
   final String name;
+  final bool? healthy;
   final VoidCallback onOpenProfile;
 
   @override
@@ -135,11 +165,19 @@ class _HomeHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _greetingFor(DateTime.now()),
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.muted(context),
-                ),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      _greetingFor(DateTime.now()),
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.muted(context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _HealthDot(healthy: healthy),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -176,6 +214,29 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HealthDot extends StatelessWidget {
+  const _HealthDot({required this.healthy});
+
+  final bool? healthy;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = healthy == true
+        ? AppColors.success
+        : healthy == false
+            ? AppColors.danger
+            : AppColors.muted(context);
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
     );
   }
 }

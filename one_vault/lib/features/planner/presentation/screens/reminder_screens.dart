@@ -130,6 +130,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> with PlannerTic
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppDimensions.pagePaddingTallFab,
           children: [
             AppSearchField(

@@ -157,6 +157,7 @@ class _PlannerCalendarScreenState extends State<PlannerCalendarScreen>
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppDimensions.pagePaddingFab,
           children: [
             Row(

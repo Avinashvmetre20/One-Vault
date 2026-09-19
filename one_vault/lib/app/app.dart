@@ -136,8 +136,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.resumed) {
       _appState.vault.onResumed();
     }
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
+    // MPIN is required after a cold start (app killed), not when the
+    // app is only minimized or sent to recents.
+    if (state == AppLifecycleState.detached) {
       _appState.lockMpin();
     }
   }

@@ -41,6 +41,9 @@ app.get("/", (req, res) => {
       calendar: "/api/v1/planner/calendar",
     },
     vault: {
+      status: "GET /api/v1/vault/status",
+      setup: "POST /api/v1/vault/setup",
+      unlock: "POST /api/v1/vault/unlock",
       passwords: "/api/v1/vault/passwords",
     },
   });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,14 +9,46 @@ import '../../../../app/theme/app_dimensions.dart';
 import '../../../../core/widgets/app_page.dart';
 import '../../../../core/widgets/list_tile_card.dart';
 
-class VaultHubScreen extends StatelessWidget {
+class VaultHubScreen extends StatefulWidget {
   const VaultHubScreen({super.key});
+
+  @override
+  State<VaultHubScreen> createState() => _VaultHubScreenState();
+}
+
+class _VaultHubScreenState extends State<VaultHubScreen> {
+  static const _vaultTab = 1;
+  ValueNotifier<int>? _shellIndex;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final index = AppScope.of(context).shellTabIndex;
+    if (!identical(_shellIndex, index)) {
+      _shellIndex?.removeListener(_onShellTab);
+      _shellIndex = index;
+      _shellIndex!.addListener(_onShellTab);
+    }
+    _onShellTab();
+  }
+
+  void _onShellTab() {
+    if (!mounted || _shellIndex?.value != _vaultTab) return;
+    unawaited(AppScope.of(context).vault.bind());
+  }
+
+  @override
+  void dispose() {
+    _shellIndex?.removeListener(_onShellTab);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     return AppPage(
       title: 'Vault',
+      refresh: state.vault.refreshHub,
       children: [
         ListTileCard(
           icon: Icons.lock_outline,

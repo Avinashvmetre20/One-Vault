@@ -25,7 +25,10 @@ class AppState extends ChangeNotifier {
   }) : _injectedAuthService = authService,
        _injectedAuthStorage = authStorage,
        _mpinStorage = mpinStorage ?? MpinStorage() {
-    _apiClient = ApiClient(refreshAccessToken: _refreshAccessToken);
+    _apiClient = ApiClient(
+      refreshAccessToken: _refreshAccessToken,
+      accessToken: () => accessToken,
+    );
     vault = VaultService(
       token: () => accessToken,
       userId: () => sessionUser?.userId,
@@ -241,13 +244,7 @@ class AppState extends ChangeNotifier {
     _applyUser(result.user);
     await _authStorage.save(result.tokens, user: result.user);
     await _loadMpinState(unlockIfPresent: true);
-    await _bindVaultIfUnlocked();
     notifyListeners();
-  }
-
-  Future<void> _bindVaultIfUnlocked() async {
-    if (!isAppUnlocked || demoVault) return;
-    await vault.bind();
   }
 
   String? takeAuthNotice() {
@@ -302,7 +299,6 @@ class AppState extends ChangeNotifier {
     hasMpin = true;
     mpinUnlocked = true;
     mpinAttemptsLeft = MpinStorage.maxAttempts;
-    await _bindVaultIfUnlocked();
     notifyListeners();
   }
 
@@ -316,7 +312,6 @@ class AppState extends ChangeNotifier {
       mpinUnlocked = true;
       mpinAttemptsLeft = MpinStorage.maxAttempts;
       await _mpinStorage.resetAttempts(userId);
-      await _bindVaultIfUnlocked();
       notifyListeners();
       return true;
     }
@@ -377,7 +372,6 @@ class AppState extends ChangeNotifier {
     mpinAttemptsLeft = MpinStorage.maxAttempts;
     final userId = sessionUser?.userId;
     if (userId != null) await _mpinStorage.resetAttempts(userId);
-    await _bindVaultIfUnlocked();
     notifyListeners();
     return true;
   }
@@ -427,6 +421,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Locks MPIN when the Flutter engine detaches (app being killed).
+  /// Cold start also requires MPIN via [restoreSession]. Minimize does not lock.
   void lockMpin() {
     if (!restoreOnStart || demoVault || _biometricPromptOpen) return;
     if (!isLoggedIn || !hasMpin || !mpinUnlocked) return;
@@ -459,6 +455,28 @@ class AppState extends ChangeNotifier {
     } finally {
       _refreshLock = null;
     }
+  }
+
+  Future<void> refreshProfile() async {
+    final token = accessToken;
+    if (demoVault ||
+        token == null ||
+        token.isEmpty ||
+        token == 'test-access-token') {
+      return;
+    }
+    try {
+      final user = await _authService.me(token);
+      _applyUser(user);
+      final storedRefresh = refreshToken;
+      if (storedRefresh != null && storedRefresh.isNotEmpty) {
+        await _authStorage.save(
+          AuthTokens(accessToken: token, refreshToken: storedRefresh),
+          user: user,
+        );
+      }
+      notifyListeners();
+    } catch (_) {}
   }
 
   void _applyUser(AuthUser user) {

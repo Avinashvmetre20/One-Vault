@@ -88,12 +88,16 @@ export const initSchema = async () => {
       email VARCHAR(255) NOT NULL,
       phone VARCHAR(20),
       password TEXT NOT NULL,
+      vault_passcode TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE users
       DROP COLUMN IF EXISTS "actual password";
+
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS vault_passcode TEXT;
 
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx
       ON users (LOWER(email));

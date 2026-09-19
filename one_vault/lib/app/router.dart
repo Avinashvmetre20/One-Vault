@@ -109,24 +109,20 @@ GoRouter createRouter(AppState appState) {
                     builder: (context, state) => const PasswordListScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'new',
                         builder: (context, state) => const PasswordFormScreen(),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: 'generator',
                         builder: (context, state) =>
                             const PasswordGeneratorScreen(),
                       ),
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
                         path: ':id',
                         builder: (context, state) =>
                             PasswordDetailScreen(id: _id(state)),
                         routes: [
                           GoRoute(
-                            parentNavigatorKey: rootNavigatorKey,
                             path: 'edit',
                             builder: (context, state) =>
                                 PasswordFormScreen(id: _id(state)),

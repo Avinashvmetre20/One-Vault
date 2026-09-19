@@ -126,6 +126,66 @@ const loadPassword = async (passwordId, authUserId) => {
   return result.rows[0] || null;
 };
 
+const loadVaultPasscode = async (authUserId) => {
+  const result = await pool.query(
+    `SELECT vault_passcode FROM users WHERE user_id = $1`,
+    [authUserId]
+  );
+  return result.rows[0]?.vault_passcode ?? null;
+};
+
+export const vaultStatus = async (req, res) => {
+  try {
+    const passcode = await loadVaultPasscode(userId(req));
+    return ok(res, { setup: Boolean(passcode) });
+  } catch (error) {
+    console.error("Vault status error:", error);
+    return fail(res, 500, "Could not load vault status");
+  }
+};
+
+export const setupVault = async (req, res) => {
+  try {
+    const passcode = String(req.body.passcode || req.body.vaultPasscode || "").trim();
+    if (passcode.length < 6) {
+      return fail(res, 400, "Vault passcode must be at least 6 characters", "VALIDATION_ERROR");
+    }
+
+    const existing = await loadVaultPasscode(userId(req));
+    if (existing) {
+      return fail(res, 409, "Vault already set up", "VAULT_ALREADY_SETUP");
+    }
+
+    await pool.query(
+      `UPDATE users
+       SET vault_passcode = $1, updated_at = NOW()
+       WHERE user_id = $2`,
+      [passcode, userId(req)]
+    );
+    return ok(res, { setup: true }, { status: 201, message: "Vault created" });
+  } catch (error) {
+    console.error("Setup vault error:", error);
+    return fail(res, 500, "Could not set up vault");
+  }
+};
+
+export const unlockVault = async (req, res) => {
+  try {
+    const passcode = String(req.body.passcode || req.body.vaultPasscode || "").trim();
+    if (!passcode) return fail(res, 400, "Vault passcode is required", "VALIDATION_ERROR");
+
+    const stored = await loadVaultPasscode(userId(req));
+    if (!stored) return fail(res, 404, "Vault is not set up", "VAULT_NOT_SETUP");
+    if (stored !== passcode) {
+      return fail(res, 401, "Wrong vault passcode", "INVALID_VAULT_PASSCODE");
+    }
+    return ok(res, { unlocked: true }, { message: "Vault unlocked" });
+  } catch (error) {
+    console.error("Unlock vault error:", error);
+    return fail(res, 500, "Could not unlock vault");
+  }
+};
+
 export const listPasswords = async (req, res) => {
   try {
     const result = await pool.query(

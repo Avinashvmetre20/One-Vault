@@ -125,6 +125,7 @@ class _PlannerHubScreenState extends State<PlannerHubScreen>
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppDimensions.pagePadding,
           children: [
             if (_loading)

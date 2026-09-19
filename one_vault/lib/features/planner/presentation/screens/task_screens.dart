@@ -96,6 +96,7 @@ class _TaskListScreenState extends State<TaskListScreen> with PlannerTickReload 
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppDimensions.pagePaddingFab,
           children: [
             AppSearchField(

@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../../../shared/models/models.dart';
 
 enum VaultAutoLock { immediately, oneMinute, fiveMinutes, fifteenMinutes }
 
@@ -30,26 +27,11 @@ class VaultLocalStore {
     return File('${dir.path}/passwords_$userId.json');
   }
 
-  Future<List<PasswordItem>> readPasswords(int userId) async {
+  Future<void> clearPasswords(int userId) async {
     try {
       final file = await _file(userId);
-      if (!await file.exists()) return const [];
-      final raw = jsonDecode(await file.readAsString());
-      if (raw is! List) return const [];
-      return raw
-          .whereType<Map>()
-          .map((item) => PasswordItem.fromPayload(Map<String, dynamic>.from(item)))
-          .toList();
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  Future<void> writePasswords(int userId, List<PasswordItem> items) async {
-    final file = await _file(userId);
-    await file.writeAsString(
-      jsonEncode(items.map((item) => item.toPayload()).toList()),
-    );
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
   }
 
   Future<bool> biometricEnabled(int userId) async {

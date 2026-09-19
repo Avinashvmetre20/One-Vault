@@ -11,11 +11,14 @@ class ApiClient {
   ApiClient({
     http.Client? client,
     this.refreshAccessToken,
+    this.accessToken,
   }) : _client = client ?? http.Client();
 
   final http.Client _client;
   final Future<bool> Function()? refreshAccessToken;
+  final String? Function()? accessToken;
   static const _timeout = Duration(seconds: 25);
+  static Future<void>? _resolving;
 
   static Map<String, String> authHeaders(String? token, {bool json = false}) {
     return {
@@ -117,11 +120,55 @@ class ApiClient {
     );
   }
 
+  Future<bool> checkHealth() async {
+    try {
+      final response = await get('/health');
+      if (response.statusCode < 200 || response.statusCode >= 300) return false;
+      return decode(response)['status'] == 'ok';
+    } catch (_) {
+      return false;
+    }
+  }
+
   Map<String, String> _withTimeZone(Map<String, String>? headers) {
+    final token = accessToken?.call();
     return {
       'X-Timezone': DeviceTimeZone.current,
       ...?headers,
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
+  }
+
+  Future<void> _ensureBaseUrl() {
+    final resolving = _resolving;
+    if (resolving != null) return resolving;
+    final future = _pickReachableBase();
+    _resolving = future;
+    return future;
+  }
+
+  Future<void> _pickReachableBase() async {
+    final urls = ApiConfig.candidateUrls;
+    final reachable = await Future.wait(urls.map(_isReachable));
+    for (var i = 0; i < urls.length; i++) {
+      if (!reachable[i]) continue;
+      ApiConfig.use(urls[i]);
+      _log('API base ${urls[i]}', isError: false);
+      return;
+    }
+    ApiConfig.use(ApiConfig.baseUrl);
+  }
+
+  Future<bool> _isReachable(String base) async {
+    try {
+      final url = '${base.replaceAll(RegExp(r'/+$'), '')}/health';
+      final response = await _client.get(Uri.parse(url)).timeout(
+        const Duration(seconds: 2),
+      );
+      return response.statusCode > 0;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<http.Response> _send({
@@ -129,6 +176,7 @@ class ApiClient {
     required String path,
     required Future<http.Response> Function() request,
   }) async {
+    await _ensureBaseUrl();
     final startedAt = DateTime.now();
     final url = _uri(path).toString();
     try {

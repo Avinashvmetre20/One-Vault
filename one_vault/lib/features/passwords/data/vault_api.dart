@@ -25,7 +25,8 @@ class VaultApi {
 
   final String? Function() _token;
   final ApiClient _api;
-  static const _base = '/api/v1/vault/passwords';
+  static const _vault = '/api/v1/vault';
+  static const _base = '$_vault/passwords';
 
   bool get _offline {
     final token = _token();
@@ -67,6 +68,33 @@ class VaultApi {
   Future<void> delete(String id) async {
     if (_offline) return;
     await _send(() => _api.delete('$_base/$id', headers: _headers()));
+  }
+
+  Future<bool> isSetup() async {
+    if (_offline) return false;
+    final json = await _send(() => _api.get('$_vault/status', headers: _headers()));
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return data['setup'] == true;
+  }
+
+  Future<void> setup(String passcode) async {
+    await _send(
+      () => _api.post(
+        '$_vault/setup',
+        headers: _headers(json: true),
+        body: jsonEncode({'passcode': passcode}),
+      ),
+    );
+  }
+
+  Future<void> unlock(String passcode) async {
+    await _send(
+      () => _api.post(
+        '$_vault/unlock',
+        headers: _headers(json: true),
+        body: jsonEncode({'passcode': passcode}),
+      ),
+    );
   }
 
   PasswordItem _readPassword(Map<String, dynamic> json) {

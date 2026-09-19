@@ -97,6 +97,7 @@ class _NoteListScreenState extends State<NoteListScreen> with PlannerTickReload 
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppDimensions.pagePaddingFab,
           children: [
             AppSearchField(

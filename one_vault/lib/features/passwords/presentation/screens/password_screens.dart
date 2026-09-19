@@ -41,15 +41,25 @@ class PasswordListScreen extends StatefulWidget {
 class _PasswordListScreenState extends State<PasswordListScreen> {
   String _query = '';
   PasswordCategory? _category;
-  bool _requestedSync = false;
+  bool _wasCurrent = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final vault = AppScope.of(context).vault;
-    if (_requestedSync || !vault.isUnlocked) return;
-    _requestedSync = true;
-    unawaited(vault.ensureRemoteSync());
+    unawaited(vault.bind());
+    final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
+    if (!vault.isUnlocked) {
+      _wasCurrent = false;
+      return;
+    }
+    if (isCurrent && !_wasCurrent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(AppScope.of(context).vault.refreshFromServer());
+      });
+    }
+    _wasCurrent = isCurrent;
   }
 
   @override
@@ -96,10 +106,13 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
         tooltip: 'Add password',
         onPressed: () => context.push(AppRoutes.passwordNew),
       ),
-      body: ListView(
-        key: const Key('password-list'),
-        padding: AppDimensions.pagePaddingFab,
-        children: [
+      body: RefreshIndicator(
+        onRefresh: vault.refreshFromServer,
+        child: ListView(
+          key: const Key('password-list'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: AppDimensions.pagePaddingFab,
+          children: [
           AppSearchField(
             hintText: 'Search passwords',
             onChanged: (value) => setState(() => _query = value),
@@ -126,7 +139,12 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
             onChanged: (value) => setState(() => _category = value),
           ),
           const SizedBox(height: 16),
-          if (items.isEmpty)
+          if (vault.syncing && items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (items.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 48),
               child: EmptyState(
@@ -154,6 +172,7 @@ class _PasswordListScreenState extends State<PasswordListScreen> {
                 ),
             ),
         ],
+        ),
       ),
     );
   }
@@ -188,18 +207,18 @@ class _VaultSetupScreenState extends State<_VaultSetupScreen> {
           icon: Icons.lock_outline,
           title: 'Create your vault',
           subtitle:
-              'This password encrypts your credentials on this device. It is never sent to the server.',
+              'Set a vault passcode. It is stored on your account and required to open passwords.',
         ),
         const SizedBox(height: 24),
         AppTextField(
           controller: _password,
-          label: 'Vault password',
+          label: 'Vault passcode',
           obscureText: true,
         ),
         AppDimensions.fieldGap,
         AppTextField(
           controller: _confirm,
-          label: 'Confirm vault password',
+          label: 'Confirm vault passcode',
           obscureText: true,
         ),
         const SizedBox(height: 20),
@@ -214,7 +233,7 @@ class _VaultSetupScreenState extends State<_VaultSetupScreen> {
 
   Future<void> _setup() async {
     if (_password.text.trim().length < 6 || _password.text != _confirm.text) {
-      showAppSnack(context, 'Passwords must match and be at least 6 characters');
+      showAppSnack(context, 'Passcodes must match and be at least 6 characters');
       return;
     }
     setState(() => _busy = true);
@@ -239,7 +258,14 @@ class _VaultUnlockScreen extends StatefulWidget {
 }
 
 class _VaultUnlockScreenState extends State<_VaultUnlockScreen> {
+  final _passcode = TextEditingController();
   bool _busy = false;
+
+  @override
+  void dispose() {
+    _passcode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -251,23 +277,42 @@ class _VaultUnlockScreenState extends State<_VaultUnlockScreen> {
         const EmptyState(
           icon: Icons.lock,
           title: 'Vault locked',
-          subtitle: 'Unlock to view and use your passwords.',
+          subtitle: 'Enter your vault passcode to view and use your passwords.',
         ),
         const SizedBox(height: 24),
-        if (vault.biometricEnabled) ...[
-          AppPrimaryButton(
-            label: 'Unlock with device authentication',
-            icon: Icons.fingerprint,
-            loading: _busy,
-            onPressed: _biometric,
-          ),
-          AppDimensions.fieldGap,
-        ],
-        AppPrimaryButton(
-          label: _busy || vault.unlocking ? 'Unlocking…' : 'Unlock',
-          loading: _busy || vault.unlocking,
-          onPressed: _unlock,
+        AppTextField(
+          controller: _passcode,
+          label: 'Vault passcode',
+          obscureText: true,
         ),
+        const SizedBox(height: 20),
+        if (vault.biometricEnabled)
+          Row(
+            children: [
+              Expanded(
+                child: AppPrimaryButton(
+                  label: 'Fingerprint',
+                  icon: Icons.fingerprint,
+                  loading: _busy,
+                  onPressed: _biometric,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: AppPrimaryButton(
+                  label: _busy || vault.unlocking ? 'Unlocking…' : 'Unlock',
+                  loading: _busy || vault.unlocking,
+                  onPressed: _unlock,
+                ),
+              ),
+            ],
+          )
+        else
+          AppPrimaryButton(
+            label: _busy || vault.unlocking ? 'Unlocking…' : 'Unlock',
+            loading: _busy || vault.unlocking,
+            onPressed: _unlock,
+          ),
       ],
     );
   }
@@ -281,9 +326,13 @@ class _VaultUnlockScreenState extends State<_VaultUnlockScreen> {
   }
 
   Future<void> _unlock() async {
+    if (_passcode.text.trim().isEmpty) {
+      showAppSnack(context, 'Enter your vault passcode');
+      return;
+    }
     setState(() => _busy = true);
     try {
-      await AppScope.of(context).vault.unlock();
+      await AppScope.of(context).vault.unlockWithPassword(_passcode.text);
     } catch (error) {
       if (!mounted) return;
       showAppSnack(context, error.toString());
@@ -420,7 +469,7 @@ class _PasswordDetailScreenState extends State<PasswordDetailScreen> {
     await state.deletePassword(item.id);
     if (!mounted) return;
     showAppSnack(context, 'Password deleted');
-    context.pop();
+    context.go(AppRoutes.passwords);
   }
 
   Future<void> _openWebsite(String website) async {

@@ -100,6 +100,7 @@ class _AlarmListScreenState extends State<AlarmListScreen> with PlannerTickReloa
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: AppDimensions.pagePaddingTallFab,
           children: [
             Text(
