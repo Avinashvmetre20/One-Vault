@@ -10,6 +10,7 @@ import '../../../../app/theme/app_dimensions.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
 import '../../../../shared/models/models.dart';
+import '../../../finance/data/finance_models.dart';
 import '../../../planner/data/planner_models.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -22,19 +23,33 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
   List<PlannerSearchHit> _plannerHits = [];
+  List<MoneyTransaction> _txnHits = [];
 
-  Future<void> _searchPlanner(String query) async {
+  Future<void> _search(String query) async {
     if (query.trim().isEmpty) {
-      setState(() => _plannerHits = []);
+      setState(() {
+        _plannerHits = [];
+        _txnHits = [];
+      });
       return;
     }
     try {
-      final hits = await AppScope.of(context).planner.search(query);
+      final state = AppScope.of(context);
+      final results = await Future.wait([
+        state.planner.search(query),
+        state.finance.search(query),
+      ]);
       if (!mounted) return;
-      setState(() => _plannerHits = hits);
+      setState(() {
+        _plannerHits = results[0] as List<PlannerSearchHit>;
+        _txnHits = results[1] as List<MoneyTransaction>;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _plannerHits = []);
+      setState(() {
+        _plannerHits = [];
+        _txnHits = [];
+      });
     }
   }
 
@@ -55,15 +70,6 @@ class _SearchScreenState extends State<SearchScreen> {
     final documentHits = q.isEmpty
         ? <DocumentItem>[]
         : state.documents.where((item) => item.name.toLowerCase().contains(q)).toList();
-    final txnHits = q.isEmpty
-        ? <TransactionItem>[]
-        : state.transactions
-              .where(
-                (item) =>
-                    item.merchant.toLowerCase().contains(q) ||
-                    item.category.toLowerCase().contains(q),
-              )
-              .toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Search')),
@@ -74,7 +80,7 @@ class _SearchScreenState extends State<SearchScreen> {
             hintText: 'Try HDFC, Amazon, insurance...',
             onChanged: (value) {
               setState(() => _query = value);
-              _searchPlanner(value);
+              _search(value);
             },
           ),
           const SizedBox(height: 20),
@@ -85,7 +91,7 @@ class _SearchScreenState extends State<SearchScreen> {
             )
           else if (passwordHits.isEmpty &&
               documentHits.isEmpty &&
-              txnHits.isEmpty &&
+              _txnHits.isEmpty &&
               _plannerHits.isEmpty)
             Text('No matches for "$q".', style: TextStyle(color: AppColors.muted(context)))
           else ...[
@@ -135,12 +141,12 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            for (final item in txnHits) ...[
+            for (final item in _txnHits) ...[
               ListTileCard(
                 icon: Icons.receipt_long_outlined,
-                title: item.merchant,
-                subtitle: '${Formatters.inr(item.amount)} · ${item.category}',
-                onTap: () => context.go(AppRoutes.transactions),
+                title: item.title,
+                subtitle: '${Formatters.inrPaise(item.amountPaise)} · ${item.categoryName ?? item.type.label}',
+                onTap: () => context.push(AppRoutes.transactionDetail(item.id)),
               ),
               const SizedBox(height: 12),
             ],

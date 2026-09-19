@@ -28,19 +28,6 @@ enum DocumentCategory {
   other,
 }
 
-enum AccountType {
-  bank,
-  cash,
-  upi,
-  wallet,
-  creditCard,
-  debitCard,
-  investment,
-  custom,
-}
-
-enum TransactionType { income, expense, transfer }
-
 extension PasswordCategoryLabel on PasswordCategory {
   String get label => switch (this) {
     PasswordCategory.banking => 'Banking',
@@ -72,18 +59,5 @@ extension DocumentCategoryLabel on DocumentCategory {
     DocumentCategory.certificates => 'Certificates',
     DocumentCategory.personal => 'Personal',
     DocumentCategory.other => 'Other',
-  };
-}
-
-extension AccountTypeLabel on AccountType {
-  String get label => switch (this) {
-    AccountType.bank => 'Bank account',
-    AccountType.cash => 'Cash',
-    AccountType.upi => 'UPI',
-    AccountType.wallet => 'Wallet',
-    AccountType.creditCard => 'Credit card',
-    AccountType.debitCard => 'Debit card',
-    AccountType.investment => 'Investment',
-    AccountType.custom => 'Custom',
   };
 }

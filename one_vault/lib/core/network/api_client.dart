@@ -140,6 +140,7 @@ class ApiClient {
   }
 
   Future<void> _ensureBaseUrl() {
+    if (kReleaseMode) return Future.value();
     final resolving = _resolving;
     if (resolving != null) return resolving;
     final future = _pickReachableBase();

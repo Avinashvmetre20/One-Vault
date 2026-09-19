@@ -9,6 +9,15 @@ abstract final class Formatters {
     ).format(amount);
   }
 
+  static String inrPaise(int paise) {
+    final negative = paise < 0;
+    final abs = paise.abs();
+    final rupees = NumberFormat.decimalPattern('en_IN').format(abs ~/ 100);
+    final remainder = abs % 100;
+    final body = remainder == 0 ? rupees : '$rupees.${remainder.toString().padLeft(2, '0')}';
+    return '${negative ? '-' : ''}₹$body';
+  }
+
   static String date(DateTime date, {String pattern = 'dd MMM yyyy'}) {
     return DateFormat(pattern).format(date.toLocal());
   }

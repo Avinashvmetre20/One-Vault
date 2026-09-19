@@ -6,7 +6,8 @@
       "request": "launch",
       "type": "dart",
       "program": "one_vault/lib/main.dart",
-      "cwd": "one_vault"
+      "cwd": "one_vault",
+      "preLaunchTask": "adb reverse 3000"
     }
   ]
 }

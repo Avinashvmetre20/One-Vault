@@ -8,6 +8,7 @@ import '../features/authentication/data/auth_models.dart';
 import '../features/authentication/data/auth_service.dart';
 import '../features/authentication/data/auth_storage.dart';
 import '../features/authentication/data/mpin_storage.dart';
+import '../features/finance/data/finance_service.dart';
 import '../features/passwords/data/vault_api.dart';
 import '../features/passwords/data/vault_service.dart';
 import '../features/planner/data/planner_service.dart';
@@ -39,6 +40,11 @@ class AppState extends ChangeNotifier {
     planner = PlannerService(
       token: () => accessToken,
       onChanged: notifyPlannerChanged,
+      apiClient: _apiClient,
+    );
+    finance = FinanceService(
+      token: () => accessToken,
+      onChanged: notifyFinanceChanged,
       apiClient: _apiClient,
     );
     _seed();
@@ -114,44 +120,23 @@ class AppState extends ChangeNotifier {
   final List<DocumentItem> documents = [];
   final List<PhotoItem> photos = [];
   final List<FileItem> files = [];
-  final List<AccountItem> accounts = [];
-  final List<TransactionItem> transactions = [];
 
   late final PlannerService planner;
+  late final FinanceService finance;
 
   final ValueNotifier<int> plannerTick = ValueNotifier<int>(0);
+  final ValueNotifier<int> financeTick = ValueNotifier<int>(0);
   final ValueNotifier<int> shellTabIndex = ValueNotifier<int>(0);
 
   void notifyPlannerChanged() {
     plannerTick.value++;
   }
 
+  void notifyFinanceChanged() {
+    financeTick.value++;
+  }
+
   String nextId(String prefix) => '$prefix-${_nextId++}';
-
-  double get monthlyIncome => transactions
-      .where((item) => item.type == TransactionType.income && _isThisMonth(item.date))
-      .fold(0, (sum, item) => sum + item.amount);
-
-  double get monthlyExpense => transactions
-      .where((item) => item.type == TransactionType.expense && _isThisMonth(item.date))
-      .fold(0, (sum, item) => sum + item.amount);
-
-  double get currentBalance =>
-      accounts.fold(0, (sum, item) => sum + item.balance);
-
-  double get monthlySavings => monthlyIncome - monthlyExpense;
-
-  bool _isThisMonth(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month;
-  }
-
-  AccountItem? accountById(String id) {
-    for (final account in accounts) {
-      if (account.id == id) return account;
-    }
-    return null;
-  }
 
   void setThemeMode(ThemeMode mode) {
     themeMode = mode;
@@ -511,11 +496,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addTransaction(TransactionItem item) {
-    transactions.insert(0, item);
-    notifyListeners();
-  }
-
   void _seed() {
     profile = PersonalInfo(
       name: 'Avinash',
@@ -662,119 +642,6 @@ class AppState extends ChangeNotifier {
         fileType: 'TXT',
         sizeLabel: '12 KB',
         createdAt: DateTime(2026, 9, 15),
-      ),
-    ]);
-
-    accounts.addAll([
-      AccountItem(
-        id: 'acc-hdfc',
-        name: 'HDFC Bank',
-        type: AccountType.bank,
-        balance: 35000,
-      ),
-      AccountItem(
-        id: 'acc-sbi',
-        name: 'SBI Bank',
-        type: AccountType.bank,
-        balance: 15000,
-      ),
-      AccountItem(
-        id: 'acc-cash',
-        name: 'Cash',
-        type: AccountType.cash,
-        balance: 2000,
-      ),
-      AccountItem(
-        id: 'acc-cc',
-        name: 'HDFC Credit Card',
-        type: AccountType.creditCard,
-        balance: -8500,
-      ),
-      AccountItem(
-        id: 'acc-upi',
-        name: 'PhonePe UPI',
-        type: AccountType.upi,
-        balance: 1250,
-      ),
-    ]);
-
-    transactions.addAll([
-      TransactionItem(
-        id: 'txn-1',
-        amount: 85000,
-        date: DateTime(2026, 9, 1),
-        accountId: 'acc-hdfc',
-        category: 'Salary',
-        description: 'September salary',
-        type: TransactionType.income,
-        paymentMethod: 'Bank transfer',
-        merchant: 'OneVault Labs',
-      ),
-      TransactionItem(
-        id: 'txn-2',
-        amount: 18000,
-        date: DateTime(2026, 9, 3),
-        accountId: 'acc-hdfc',
-        category: 'Rent',
-        description: 'House rent',
-        type: TransactionType.expense,
-        paymentMethod: 'UPI',
-        merchant: 'Landlord',
-      ),
-      TransactionItem(
-        id: 'txn-3',
-        amount: 6500,
-        date: DateTime(2026, 9, 10),
-        accountId: 'acc-upi',
-        category: 'Food',
-        description: 'Groceries and dining',
-        type: TransactionType.expense,
-        paymentMethod: 'UPI',
-        merchant: 'BigBasket',
-      ),
-      TransactionItem(
-        id: 'txn-4',
-        amount: 4200,
-        date: DateTime(2026, 9, 8),
-        accountId: 'acc-sbi',
-        category: 'Bills',
-        description: 'Electricity and internet',
-        type: TransactionType.expense,
-        paymentMethod: 'Auto-debit',
-        merchant: 'Utilities',
-      ),
-      TransactionItem(
-        id: 'txn-5',
-        amount: 2499,
-        date: DateTime(2026, 9, 16),
-        accountId: 'acc-cc',
-        category: 'Shopping',
-        description: 'Amazon order',
-        type: TransactionType.expense,
-        paymentMethod: 'Credit card',
-        merchant: 'Amazon',
-      ),
-      TransactionItem(
-        id: 'txn-6',
-        amount: 3800,
-        date: DateTime(2026, 9, 12),
-        accountId: 'acc-upi',
-        category: 'Travel',
-        description: 'Cab and metro',
-        type: TransactionType.expense,
-        paymentMethod: 'UPI',
-        merchant: 'Uber',
-      ),
-      TransactionItem(
-        id: 'txn-7',
-        amount: 7351,
-        date: DateTime(2026, 9, 5),
-        accountId: 'acc-hdfc',
-        category: 'EMI',
-        description: 'Vehicle EMI',
-        type: TransactionType.expense,
-        paymentMethod: 'Auto-debit',
-        merchant: 'HDFC Bank',
       ),
     ]);
   }

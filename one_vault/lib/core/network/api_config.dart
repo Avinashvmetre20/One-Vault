@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 abstract final class ApiConfig {
   static const productionUrl = 'https://one-vault-wgdu.onrender.com';
   static const _port = 3000;
@@ -7,13 +9,15 @@ abstract final class ApiConfig {
   static const _fromEnv = String.fromEnvironment('API_BASE_URL');
   static String? _resolved;
 
-  /// USB phone: `adb reverse tcp:3000 tcp:3000` then loopback.
-  /// Override with `--dart-define=API_BASE_URL=...`
-  static String get baseUrl =>
-      _resolved ?? (_fromEnv.isNotEmpty ? _fromEnv : loopbackUrl);
+  static String get baseUrl {
+    if (_resolved != null) return _resolved!;
+    if (_fromEnv.isNotEmpty) return _fromEnv;
+    if (kReleaseMode) return productionUrl;
+    return loopbackUrl;
+  }
 
   static List<String> get candidateUrls {
-    if (_fromEnv.isNotEmpty) return [_fromEnv];
+    if (kReleaseMode || _fromEnv.isNotEmpty) return [baseUrl];
     return const [
       loopbackUrl,
       lanUrl,

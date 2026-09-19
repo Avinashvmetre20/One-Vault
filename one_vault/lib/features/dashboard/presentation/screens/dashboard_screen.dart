@@ -14,6 +14,7 @@ import '../../../../core/widgets/section_title.dart';
 import '../../../../app/app_state.dart';
 import '../../../../shared/enums/enums.dart';
 import '../../../../shared/helpers/formatters.dart';
+import '../../../finance/data/finance_models.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -25,17 +26,49 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _api = ApiClient();
   bool? _healthy;
+  ValueNotifier<int>? _financeTick;
 
   @override
   void initState() {
     super.initState();
     _checkHealth();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFinance());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tick = AppScope.of(context).financeTick;
+    if (!identical(_financeTick, tick)) {
+      _financeTick?.removeListener(_loadFinance);
+      _financeTick = tick;
+      _financeTick!.addListener(_loadFinance);
+    }
+  }
+
+  @override
+  void dispose() {
+    _financeTick?.removeListener(_loadFinance);
+    super.dispose();
+  }
+
+  Future<void> _loadFinance() async {
+    await AppScope.of(context).finance.loadOverview(force: true);
+    if (mounted) setState(() {});
   }
 
   Future<void> _checkHealth() async {
     final ok = await _api.checkHealth();
     if (!mounted) return;
     setState(() => _healthy = ok);
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([
+      _checkHealth(),
+      AppScope.of(context).finance.loadOverview(force: true),
+    ]);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -48,7 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final width = constraints.maxWidth;
             final padding = AppDimensions.horizontalPadding(width);
             return RefreshIndicator(
-              onRefresh: _checkHealth,
+              onRefresh: _refresh,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -320,6 +353,7 @@ class _FinanceSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final overview = state.finance.overview ?? const MoneyOverview();
     return Column(
       children: [
         Row(
@@ -327,7 +361,7 @@ class _FinanceSummary extends StatelessWidget {
             Expanded(
               child: _StatChip(
                 label: 'Income',
-                value: Formatters.inr(state.monthlyIncome),
+                value: Formatters.inrPaise(overview.monthlyIncomePaise),
                 color: AppColors.success,
               ),
             ),
@@ -335,7 +369,7 @@ class _FinanceSummary extends StatelessWidget {
             Expanded(
               child: _StatChip(
                 label: 'Expenses',
-                value: Formatters.inr(state.monthlyExpense),
+                value: Formatters.inrPaise(overview.monthlyExpensePaise),
                 color: AppColors.danger,
               ),
             ),
@@ -347,14 +381,14 @@ class _FinanceSummary extends StatelessWidget {
             Expanded(
               child: _StatChip(
                 label: 'Balance',
-                value: Formatters.inr(state.currentBalance),
+                value: Formatters.inrPaise(overview.cashAndBankPaise),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _StatChip(
                 label: 'Savings',
-                value: Formatters.inr(state.monthlySavings),
+                value: Formatters.inrPaise(overview.netIncomePaise),
                 color: AppColors.primary,
               ),
             ),
@@ -473,21 +507,17 @@ class _UpcomingItems extends StatelessWidget {
 
     return Column(
       children: [
-        ListTileCard(
-          icon: Icons.credit_card,
-          title: 'Credit card due',
-          subtitle: '22 Sep 2026 · HDFC Credit Card',
-          onTap: () => context.go(AppRoutes.money),
-        ),
-        if (expiries.isNotEmpty) ...[
-          const SizedBox(height: 12),
+        if (expiries.isNotEmpty)
           ListTileCard(
             icon: Icons.event_busy_outlined,
             title: '${expiries.first.name} expires',
             subtitle: Formatters.date(expiries.first.expiryDate!),
             onTap: () => context.push(AppRoutes.documentDetail(expiries.first.id)),
+          )
+        else
+          const AppCard(
+            child: Text('No upcoming bills or expiries.'),
           ),
-        ],
       ],
     );
   }
@@ -499,25 +529,30 @@ class _RecentItems extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final recentTxn = state.transactions.first;
-    final recentDoc = state.documents.first;
+    final recentTxn = state.finance.overview?.recentTransactions.firstOrNull;
+    final recentDoc = state.documents.isEmpty ? null : state.documents.first;
 
     return Column(
       children: [
-        ListTileCard(
-          icon: Icons.receipt_long_outlined,
-          title: recentTxn.merchant,
-          subtitle:
-              '${recentTxn.type == TransactionType.income ? '+' : '-'}${Formatters.inr(recentTxn.amount)} · ${recentTxn.category}',
-          onTap: () => context.go(AppRoutes.transactions),
-        ),
-        const SizedBox(height: 12),
-        ListTileCard(
-          icon: Icons.description_outlined,
-          title: recentDoc.name,
-          subtitle: recentDoc.category.label,
-          onTap: () => context.push(AppRoutes.documentDetail(recentDoc.id)),
-        ),
+        if (recentTxn != null) ...[
+          ListTileCard(
+            icon: Icons.receipt_long_outlined,
+            title: recentTxn.title,
+            subtitle:
+                '${recentTxn.showsAsCredit ? '+' : '-'}${Formatters.inrPaise(recentTxn.amountPaise)} · ${recentTxn.categoryName ?? recentTxn.type.label}',
+            onTap: () => context.go(AppRoutes.transactions),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (recentDoc != null)
+          ListTileCard(
+            icon: Icons.description_outlined,
+            title: recentDoc.name,
+            subtitle: recentDoc.category.label,
+            onTap: () => context.push(AppRoutes.documentDetail(recentDoc.id)),
+          )
+        else if (recentTxn == null)
+          const AppCard(child: Text('No recent activity yet.')),
       ],
     );
   }

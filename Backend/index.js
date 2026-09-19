@@ -7,6 +7,7 @@ import { loadTimeZones } from "./utils/time.js";
 import authRoutes from "./routes/auth.js";
 import plannerRoutes from "./routes/planner.js";
 import vaultRoutes from "./routes/vault.js";
+import moneyRoutes from "./routes/money.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +47,15 @@ app.get("/", (req, res) => {
       unlock: "POST /api/v1/vault/unlock",
       passwords: "/api/v1/vault/passwords",
     },
+    money: {
+      overview: "GET /api/v1/money/overview",
+      accounts: "/api/v1/money/accounts",
+      cards: "/api/v1/money/cards",
+      categories: "/api/v1/money/categories",
+      transactions: "/api/v1/money/transactions",
+      transfers: "/api/v1/money/transfers",
+      reports: "GET /api/v1/money/reports",
+    },
   });
 });
 
@@ -69,6 +79,7 @@ app.get("/health", async (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/v1/planner", plannerRoutes);
 app.use("/api/v1/vault", vaultRoutes);
+app.use("/api/v1/money", moneyRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

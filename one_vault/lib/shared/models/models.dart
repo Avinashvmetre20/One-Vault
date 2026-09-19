@@ -204,44 +204,6 @@ class FileItem {
   final bool isFavorite;
 }
 
-class AccountItem {
-  AccountItem({
-    required this.id,
-    required this.name,
-    required this.type,
-    required this.balance,
-  });
-
-  final String id;
-  final String name;
-  final AccountType type;
-  final double balance;
-}
-
-class TransactionItem {
-  TransactionItem({
-    required this.id,
-    required this.amount,
-    required this.date,
-    required this.accountId,
-    required this.category,
-    required this.description,
-    required this.type,
-    required this.paymentMethod,
-    required this.merchant,
-  });
-
-  final String id;
-  final double amount;
-  final DateTime date;
-  final String accountId;
-  final String category;
-  final String description;
-  final TransactionType type;
-  final String paymentMethod;
-  final String merchant;
-}
-
 class PersonalInfo {
   PersonalInfo({
     required this.name,

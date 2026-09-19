@@ -98,8 +98,8 @@ void main() {
 
     await tester.tap(find.byTooltip('Money'));
     await tester.pumpAndSettle();
-    expect(find.text('HDFC Bank'), findsOneWidget);
-    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('No accounts added yet'), findsOneWidget);
+    expect(find.text('Accounts'), findsNothing);
 
     await tester.tap(find.byTooltip('Planner'));
     await tester.pumpAndSettle();

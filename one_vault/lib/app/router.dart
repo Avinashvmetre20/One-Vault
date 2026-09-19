@@ -10,7 +10,12 @@ import '../features/authentication/presentation/screens/splash_screen.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/documents/presentation/screens/document_screens.dart';
 import '../features/files/presentation/screens/file_screens.dart';
+import '../features/finance/presentation/screens/account_screens.dart';
+import '../features/finance/presentation/screens/card_screens.dart';
+import '../features/finance/presentation/screens/category_screens.dart';
 import '../features/finance/presentation/screens/finance_screens.dart';
+import '../features/finance/presentation/screens/report_screens.dart';
+import '../features/finance/presentation/screens/transaction_screens.dart';
 import '../features/planner/presentation/screens/alarm_screens.dart';
 import '../features/planner/presentation/screens/calendar_screens.dart';
 import '../features/planner/presentation/screens/note_screens.dart';
@@ -193,20 +198,85 @@ GoRouter createRouter(AppState appState) {
                 builder: (context, state) => const FinanceDashboardScreen(),
                 routes: [
                   GoRoute(
+                    path: 'accounts/new',
+                    builder: (context, state) => const AccountFormScreen(),
+                  ),
+                  GoRoute(
+                    path: 'cards/new',
+                    builder: (context, state) => const CardFormScreen(),
+                  ),
+                  GoRoute(
+                    path: 'transactions/new',
+                    builder: (context, state) => TransactionFormScreen(
+                      initialType: state.uri.queryParameters['type'],
+                    ),
+                  ),
+                  GoRoute(
                     path: 'accounts',
                     builder: (context, state) => const AccountsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) =>
+                            AccountDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            path: 'edit',
+                            builder: (context, state) =>
+                                AccountFormScreen(id: _intId(state)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'cards',
+                    builder: (context, state) => const CardsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) =>
+                            CardDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            path: 'edit',
+                            builder: (context, state) =>
+                                CardFormScreen(id: _intId(state)),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'transactions',
                     builder: (context, state) => const TransactionsScreen(),
                     routes: [
                       GoRoute(
-                        parentNavigatorKey: rootNavigatorKey,
-                        path: 'new',
+                        path: ':id',
                         builder: (context, state) =>
-                            const TransactionFormScreen(),
+                            TransactionDetailScreen(id: _intId(state)),
+                        routes: [
+                          GoRoute(
+                            path: 'edit',
+                            builder: (context, state) =>
+                                TransactionFormScreen(id: _intId(state)),
+                          ),
+                        ],
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'transfers',
+                    builder: (context, state) =>
+                        const TransactionsScreen(forcedType: 'transfer'),
+                  ),
+                  GoRoute(
+                    path: 'categories',
+                    builder: (context, state) => const CategoriesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'reports',
+                    builder: (context, state) => const MoneyReportsScreen(),
                   ),
                 ],
               ),

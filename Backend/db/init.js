@@ -1,6 +1,7 @@
 import { pool } from "../config/db.js";
 import { initPlannerSchema } from "./planner.js";
 import { initVaultSchema } from "./vault.js";
+import { initFinanceSchema } from "./finance.js";
 
 const tableExists = async (tableName) => {
   const result = await pool.query(
@@ -132,4 +133,5 @@ export const initSchema = async () => {
 
   await initPlannerSchema();
   await initVaultSchema();
+  await initFinanceSchema();
 };

@@ -28,8 +28,23 @@ abstract final class AppRoutes {
 
   static const money = '/money';
   static const accounts = '/money/accounts';
+  static const accountNew = '/money/accounts/new';
+  static String accountDetail(int id) => '/money/accounts/$id';
+  static String accountEdit(int id) => '/money/accounts/$id/edit';
+
+  static const cards = '/money/cards';
+  static const cardNew = '/money/cards/new';
+  static String cardDetail(int id) => '/money/cards/$id';
+  static String cardEdit(int id) => '/money/cards/$id/edit';
+
   static const transactions = '/money/transactions';
   static const transactionNew = '/money/transactions/new';
+  static String transactionDetail(int id) => '/money/transactions/$id';
+  static String transactionEdit(int id) => '/money/transactions/$id/edit';
+
+  static const transfers = '/money/transfers';
+  static const moneyCategories = '/money/categories';
+  static const moneyReports = '/money/reports';
 
   static const planner = '/planner';
   static const tasks = '/planner/tasks';
